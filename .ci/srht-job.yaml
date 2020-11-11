@@ -1,0 +1,43 @@
+image: nixos/unstable
+sources:
+  - https://github.com/colemickens/niche#master # use a PAT to push back
+secrets:
+  - 3396ef98-8bbc-4602-8b6e-2a6c2fcf4d01 # srht gpg key for sops
+environment:
+  CI_BUILD: "sr.ht"
+tasks:
+  - prep: |
+      cd niche
+      nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable -p cachix --command "./.ci/step-prep.sh"
+      nix-shell --pure --command "true"
+  - unlock: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-unlock.sh"
+  - try-update: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-try-update.sh"
+  - cache: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-cache.sh"
+  - test-azure: |
+      cd niche
+      nix-shell --pure --command "./tests/test-azure.sh"
+  - test-b2: |
+      cd niche
+      nix-shell --pure --command "./test-b2.sh"
+  - test-google: |
+      cd niche
+      nix-shell --pure --command "./test-google.sh"
+  - test-s3: |
+      cd niche
+      nix-shell --pure --command "./test-s3.sh"
+  - test-wasabi: |
+      cd niche
+      nix-shell --pure --command "./test-wasabi.sh"
+  - push: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-push.sh"
+
+# TODO: there's lots to improve here
+# - extract this out into a bespoke Nix CI system that supports multi-arch jobs
+# - split into separate jobs?
