@@ -1,0 +1,36 @@
+
+	// var argListen struct {
+	// 	socketPath string
+	// 	cache      string
+	// }
+	// var cmdListen = &cobra.Command{
+	// 	Use:   "listen",
+	// 	Short: "listen [{--socket | -s} /tmp/niche] {--cache-url | -u} https://nix.example.org/cache",
+	// 	Args:  cobra.MinimumNArgs(1), // TODO: do the URL parsing here instead
+	// 	RunE: func(cmd *cobra.Command, args []string) error {
+	// 		cacheURL, err := url.Parse(args[0])
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		if argListen.socketPath == "" {
+	// 			dir, err := ioutil.TempDir("", "niche")
+	// 			if err != nil {
+	// 				return err
+	// 			}
+	// 			defer os.RemoveAll(dir)
+	// 			argListen.socketPath = filepath.Join(dir, "queue.sock")
+	// 		}
+
+	// 		err = listen(argListen.socketPath, *cacheURL)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		fmt.Println(argListen.socketPath)
+	// 		return nil
+	// 	},
+	// }
+	// cmdListen.PersistentFlags().StringVarP(&argListen.socketPath, "socket", "s", "", "path for socket to listen on")
+	// cmdListen.PersistentFlags().StringVarP(&argListen.cache, "cache-url", "u", "", "cache url")
+	// rootCmd.AddCommand(cmdListen)

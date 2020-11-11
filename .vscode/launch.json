@@ -11,7 +11,17 @@
             "mode": "auto",
             "program": "${fileDirname}",
             "env": {},
-            "args": []
+            "args": [
+                "build",
+                "-u",
+                "https://cache.niche.org",
+                "--",
+                "github:colemickens/nixcfg#drm-howto"
+            ],
+            //"args": [ "config", "update" ]
+            //"args": [ "config", "update" ]
+            //"args": [ "listen", "-h", "https://cache.niche.org", "-s", "/tmp/niche.sock" ]
+            //"args": [ "queue", "-s", "/tmp/niche.sock" ]
         }
     ]
 }
