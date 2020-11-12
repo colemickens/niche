@@ -12,12 +12,14 @@ import (
 	"path"
 
 	"github.com/graymeta/stow"
+	_ "github.com/graymeta/stow/azure"
+	_ "github.com/graymeta/stow/google"
+	_ "github.com/graymeta/stow/s3"
 	sops "go.mozilla.org/sops/v3"
 	"go.mozilla.org/sops/v3/aes"
 	"go.mozilla.org/sops/v3/cmd/sops/common"
 	"go.mozilla.org/sops/v3/cmd/sops/formats"
 	"go.mozilla.org/sops/v3/decrypt"
-	"go.mozilla.org/sops/v3/keyservice"
 	"go.mozilla.org/sops/v3/version"
 )
 
@@ -38,6 +40,7 @@ func clientFromFile(pth string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(string(byts))
 	return clientFromBytes(byts)
 }
 
@@ -143,7 +146,7 @@ func (c *Client) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 		},
 		FilePath: "non-applicable",
 	}
-	dataKey, errs := tree.GenerateDataKeyWithKeyServices([]keyservice.KeyServiceClient{})
+	dataKey, errs := tree.GenerateDataKey()
 	if len(errs) > 0 {
 		err = fmt.Errorf("Could not generate data key: %s", errs)
 		return nil, err

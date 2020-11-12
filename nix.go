@@ -117,9 +117,10 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	nbArgs = append(nbArgs, "--option", "post-build-hook", postBuildHook, "--out-link", outLink)
 	cmd := exec.Command("nix", nbArgs...)
 
-	err = cmd.Run()
-	if err != nil {
-		return err
+	_, err = cmd.Output()
+	if eerr, ok := err.(*exec.ExitError); ok {
+		fmt.Println(string(eerr.Stderr))
+		panic(eerr)
 	}
 
 	c, err := net.Dial("unix", socketPath)

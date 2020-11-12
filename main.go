@@ -54,7 +54,7 @@ func main() {
 	var cmdReconfigure = &cobra.Command{
 		Use: "reconfigure",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheURL, err := url.Parse(args[0])
+			cacheURL, err := url.Parse(argReconfigure.cache)
 			if err != nil {
 				return err
 			}
@@ -63,12 +63,12 @@ func main() {
 			if argReconfigure.configFilePath != "" {
 				c, err = clientFromFile(argReconfigure.configFilePath)
 				if err != nil {
-					return nil
+					return err
 				}
 			} else {
 				c, err = clientFromSops(*cacheURL)
 				if err != nil {
-					return nil
+					return err
 				}
 				// TODO: does it make sense to deserialize and then reserialize?
 				//  -   we could just hold onto the raw bytes when we load+parse?
@@ -83,7 +83,7 @@ func main() {
 				// update client with a new one built from the new config
 				c, err = clientFromBytes(newConfigBytes)
 				if err != nil {
-					return nil
+					return err
 				}
 			}
 			defer c.stowClient.Close()
@@ -110,7 +110,10 @@ func main() {
 		Short: "builds an INSTALLABLE and uploads each output as they're built",
 		Args:  cobra.MinimumNArgs(0),
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
-			cacheURL, err := url.Parse(args[0])
+			extraArgs := args
+			_ = extraArgs // TODO: Fix this
+
+			cacheURL, err := url.Parse(argBuild.cache)
 			if err != nil {
 				return err
 			}
@@ -138,7 +141,7 @@ func main() {
 				}
 			}
 
-			err = build(*cacheURL, socketPath)
+			err = build(*cacheURL, socketPath, extraArgs...)
 			if err != nil {
 				return err
 			}
