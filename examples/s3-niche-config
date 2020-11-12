@@ -1,0 +1,21 @@
+{
+    "configVersion": 1,
+    "config": {
+        "cacheUrl": "https://cache.niche.org",
+        "signingKey": "MW/rGz8+sdxjtMnMVt5Bl3jqfzEcQaReZLP+GYgHUZZhaW411u4SycZMhq32oTnujmxBLfaGQ+1J5K/e4acpsA=="
+        "storageKind": "s3",
+        "storageConfigMap": {
+            "access_key_id": "AKIAJOLKWSPVSVS4XDIA",
+            "secret_key: "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",
+            "region": "us-west-2",
+            "endpoint": "https://s3.us-west-2.amazonaws.com"
+        },
+        "containerName": "colemickens-niche-test",
+        "sopsKeyGroups": {
+            "pgp": [
+                "5e654f4bb0e3b1114af9eccf4246a55397edb8e9"
+                "EAE0488FD59B66251E9004D1D7FA118E53E6D398"
+            ]
+        }
+    }
+}

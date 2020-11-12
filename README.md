@@ -8,21 +8,27 @@ mirror for serving substitutes to Nix clients.
 ## overview
 
 - support (and tested) for pushing to S3, Azure, Wasabi, etc
+- we know nothing about the url, right? just storage b/e details
+- maybe we need the URL for forming the nar url in the narinfo tho?
+
+## why this is cool
+
+1. It wraps `nix build` and catches built packages on the fly. This is highly useful for CI scenarios.
+2. You don't have to worry about managing your Nix signing key. You can delegate protecting it to Sops (and thereby to GPG or cloud authentication where Sops supports it)
+3. You can bring-your-own-storage! This is useful for all sorts of security- or cost-conscious reasons.
+
+## compared to cachix
+- cachix is free, cachix is a managed service
+- cachix is pricey, cachix is not on-prem
+- cachix doesn't (yet) handle OTF build outputs very well
 
 ## documentation
 
 1. Create storage container.
 2. Get access credentails.
-3. Create config file. (create signing keys)
-4. Upload config file.
-
-## why
-
-ghc, boo. proprietary, boo. self-hosting, bandwidth, faster solution for OTF build outputs, etc
-
-## why not
-
-Cachix is great. Cachix is much more flexible and powerful and likely reliable.
+3. Create signing keys.
+4. Create config file.
+5. Upload config file.
 
 ## usage examples
 
@@ -47,6 +53,13 @@ echo /nix/store/abcdefghi-foo | niche upload -u 'https://nix.example.org/cache'
 
 # TODO: multi-line-output example/test
 ```
+
+## long-term
+
+While I like the *model* of Sops, I don't like it's overall feature-set, UX, or code quality.
+I think it's ripe for a Rust/(r)age-y replacement.
+
+I'd like to replace Sops and then rewrite this in Rust using "Rops" or whatever it might be.
 
 ## todo
 

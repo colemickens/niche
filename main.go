@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"net"
 	"net/url"
@@ -58,18 +59,38 @@ func main() {
 				return err
 			}
 
-			var newConfig unversionedNicheConfig
+			var c *Client
 			if argReconfigure.configFilePath != "" {
-				newConfig, err = configFromFilePath(argReconfigure.configFilePath)
+				c, err = clientFromFile(argReconfigure.configFilePath)
+				if err != nil {
+					return nil
+				}
+			} else {
+				c, err = clientFromSops(*cacheURL)
+				if err != nil {
+					return nil
+				}
+				// TODO: does it make sense to deserialize and then reserialize?
+				//  -   we could just hold onto the raw bytes when we load+parse?
+				oldBytes, err := json.Marshal(c.config)
 				if err != nil {
 					return err
 				}
-			} else {
-				newConfig = unversionedNicheConfig{}
+				newConfigBytes, err := CaptureInputFromEditor(oldBytes)
+				if err != nil {
+					return err
+				}
+				// update client with a new one built from the new config
+				c, err = clientFromBytes(newConfigBytes)
+				if err != nil {
+					return nil
+				}
 			}
+			defer c.stowClient.Close()
 
 			// TODO: sanity check, warn if keys change?
-			err = replaceConfig(*cacheURL, newConfig)
+
+			err = c.reuploadConfig()
 			if err != nil {
 				return err
 			}
@@ -104,7 +125,14 @@ func main() {
 				defer os.RemoveAll(dir)
 				socketPath = filepath.Join(dir, "queue.sock")
 
-				go listen(socketPath, *cacheURL) // TODO: quit channel
+				c, err := clientFromSops(*cacheURL)
+				if err != nil {
+					return nil
+				}
+				defer c.stowClient.Close()
+
+				// TODO: waitgroup + quit chan
+				go listen(c, socketPath)
 				if err != nil {
 					return err
 				}
@@ -114,6 +142,8 @@ func main() {
 			if err != nil {
 				return err
 			}
+
+			// TODO: wait for listen
 
 			return nil
 		},
