@@ -13,10 +13,9 @@
             "env": {},
             "args": [
                 "build",
-                "-u",
-                "https://azdev2020nov.blob.core.windows.net/cache",
+                "-u", "https://azdev2020nov.blob.core.windows.net/cach3",
                 "--",
-                "/home/cole/code/nixcfg#drm-howto"
+                "/home/cole/code/flake-impure", "--impure"
             ]
         },
         {
@@ -28,10 +27,8 @@
             "env": {},
             "args": [
                 "reconfigure",
-                "-u",
-                "https://azdev2020nov.blob.core.windows.net/cache",
-                "-c",
-                "./examples/azure-niche-config"
+                "-u", "https://azdev2020nov.blob.core.windows.net/cach3",
+                "-c", "./examples/azure-niche-config"
             ]
         }
     ]

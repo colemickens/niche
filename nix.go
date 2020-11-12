@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/numtide/go-nix/src/libstore"
 	"github.com/ulikunitz/xz"
@@ -30,26 +32,32 @@ type NixPathInfoOutput struct {
 	Signatures []string
 }
 
-func nixPathInfo(storePath string) (*libstore.NarInfo, error) {
-	pathInfoCmd := exec.Command("nix", "path-info", storePath)
+func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int) (*libstore.NarInfo, error) {
+	pathInfoCmd := exec.Command("nix", "path-info", "--json", storePath)
 	pathInfoBytes, err := pathInfoCmd.Output()
 	if err != nil {
 		return nil, err
 	}
 
-	var info NixPathInfoOutput
+	var info []NixPathInfoOutput
+	s := string(pathInfoBytes)
+	_ = s
 	err = json.Unmarshal(pathInfoBytes, &info)
 	if err != nil {
 		return nil, err
 	}
 
 	return &libstore.NarInfo{
-		StorePath:  info.Path,
-		NarHash:    info.NarHash,
-		NarSize:    info.NarSize,
-		References: info.References,
-		Deriver:    info.Deriver,
-		Signatures: info.Signatures,
+		URL:         narItemPath,
+		Compression: "xz", // TODO: this is hardcoded, function is less generic than named
+		StorePath:   info[0].Path,
+		FileHash:    fileHash,
+		FileSize:    fileSize,
+		NarHash:     info[0].NarHash,
+		NarSize:     info[0].NarSize,
+		References:  info[0].References,
+		Deriver:     info[0].Deriver,
+		Signatures:  info[0].Signatures,
 	}, nil
 }
 
@@ -97,7 +105,11 @@ func getAllStorePaths(storePath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	outputStrings := strings.Split(string(outputBytes), "\n")
+
+	splitFn := func(c rune) bool {
+		return (c == ' ' || c == '\n' || c == '\r')
+	}
+	outputStrings := strings.FieldsFunc(string(outputBytes), splitFn)
 
 	return outputStrings, nil
 }
@@ -108,13 +120,29 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 		return err
 	}
 
-	postBuildHook := fmt.Sprintf("%s queue -s %s", self, socketPath)
+	//postBuildHook := fmt.Sprintf("%s queue -s %s", self, socketPath)
+	//os.TempDir(), "pbh") // TODO: better
+
+	postBuildBody := fmt.Sprintf("#!/bin/sh\n%s queue -s %s", self, socketPath)
+	postBuildHookPath := "/tmp/pbh"
+	f, err := os.Create(postBuildHookPath)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(postBuildHookPath, []byte(postBuildBody), 0777)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	if err := os.Chmod(postBuildHookPath, 0777); err != nil {
+		return err
+	}
 
 	outLink := "/tmp/outlink" // TODO TODO TODO TODO
 	// TODO rm outlink just in case
 	nbArgs := []string{"build"}
 	nbArgs = append(nbArgs, buildArgs...)
-	nbArgs = append(nbArgs, "--option", "post-build-hook", postBuildHook, "--out-link", outLink)
+	nbArgs = append(nbArgs, "--option", "post-build-hook", postBuildHookPath, "--out-link", outLink)
 	cmd := exec.Command("nix", nbArgs...)
 
 	_, err = cmd.Output()
@@ -131,6 +159,10 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	_, err = c.Write([]byte(outLink + "\n"))
 	if err != nil {
 		return err
+	}
+
+	for {
+		time.Sleep(time.Second * 1)
 	}
 
 	return nil

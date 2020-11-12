@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 func handle(c *Client, conn net.Conn, exit chan error) {
@@ -24,8 +25,7 @@ func handle(c *Client, conn net.Conn, exit chan error) {
 			exit <- err
 			return
 		}
-		fmt.Printf("%s", byts)
-		storePath := string(byts)
+		storePath := strings.Trim(string(byts), " \r\n")
 
 		if storePath == "QUIT" {
 			break
@@ -48,7 +48,7 @@ func handle(c *Client, conn net.Conn, exit chan error) {
 		}
 		fmt.Println("handled all paths")
 	}
-	fmt.Println("Quitting the listen loop for %s", conn.RemoteAddr())
+	fmt.Printf("Quitting the listen loop for %s\n", conn.RemoteAddr())
 }
 
 // TODO: we need to write to a single queue
@@ -65,18 +65,18 @@ func listen(c *Client, socketPath string) error {
 	}
 	defer l.Close()
 
-	for {
-		// Accept new connections, dispatching them to echoServer
-		// in a goroutine.
-		conn, err := l.Accept()
-		if err != nil {
-			log.Fatal("accept error:", err)
-		}
-
-		exit := make(chan error)
-
-		go handle(c, conn, exit)
+	//for {
+	// Accept new connections, dispatching them to echoServer
+	// in a goroutine.
+	conn, err := l.Accept()
+	if err != nil {
+		log.Fatal("accept error:", err)
 	}
+
+	exit := make(chan error)
+
+	handle(c, conn, exit)
+	//}
 	defer os.RemoveAll(socketPath)
 	return nil
 }

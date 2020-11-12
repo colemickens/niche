@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/azure"
@@ -129,10 +130,6 @@ func (c *Client) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// path, err := filepath.Abs(opts.InputPath)
-	// if err != nil {
-	// 	return nil, err
-	// }
 	tree := sops.Tree{
 		Branches: branches,
 		Metadata: sops.Metadata{
@@ -169,11 +166,10 @@ func (c *Client) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 }
 
 func (c *Client) ensurePath(storePath string) error {
-	narXzItemName := narXzKeyForPath(c.config.StorageContainer, storePath)
-	narInfoItemName := narInfoKeyForPath(c.config.StorageContainer, storePath)
+	narPath, infoPath := narPathsFromStorePath(storePath)
 
-	_, errNarXz := c.stowContainer.Item(narXzItemName)
-	_, errNarInfo := c.stowContainer.Item(narInfoItemName)
+	_, errNarXz := c.stowContainer.Item(narPath)
+	_, errNarInfo := c.stowContainer.Item(infoPath)
 
 	if errNarXz != nil {
 		compressedNarFilePath, err := nixDumpPath(storePath)
@@ -192,7 +188,7 @@ func (c *Client) ensurePath(storePath string) error {
 		if err != nil {
 			return err
 		}
-		item, err := c.stowContainer.Put(narXzItemName, f, stat.Size(), nil)
+		item, err := c.stowContainer.Put(narPath, f, stat.Size(), nil)
 		if err != nil {
 			return err
 		}
@@ -214,7 +210,7 @@ func (c *Client) ensurePath(storePath string) error {
 
 		narInfoStr := narInfo.String()
 		narInfoRdr := bytes.NewBufferString(narInfoStr)
-		item, err := c.stowContainer.Put(narXzItemName, narInfoRdr, int64(len(narInfoStr)), nil)
+		item, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
 		if err != nil {
 			return err
 		}
@@ -223,10 +219,9 @@ func (c *Client) ensurePath(storePath string) error {
 	return nil
 }
 
-func narInfoKeyForPath(containerName, storePath string) string {
-	return containerName + "/" + storePath + ".narinfo"
-}
-
-func narXzKeyForPath(containerName, storePath string) string {
-	return containerName + "/nars/" + storePath + ".nar.xz"
+func narPathsFromStorePath(storePath string) (string, string) {
+	storePathBase := filepath.Base(storePath)
+	narPath := fmt.Sprintf("nars/%s.nar.xz", storePathBase)
+	infoPath := storePathBase + ".narinfo"
+	return narPath, infoPath
 }

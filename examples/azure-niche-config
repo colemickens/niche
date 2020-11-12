@@ -1,7 +1,7 @@
 {
   "signingKey": "MW/rGz8+sdxjtMnMVt5Bl3jqfzEcQaReZLP+GYgHUZZhaW411u4SycZMhq32oTnujmxBLfaGQ+1J5K/e4acpsA==",
   "storageKind": "azure",
-  "storageContainer": "cache",
+  "storageContainer": "cach3",
   "storageConfigMap": {
     "account": "azdev2020nov",
     "key": "lHWgXYtCHJI3deu6rhSDeFWCWsCqJZZu3Pgxm49LZO8CPwKPA+pfV9AaN/d760gKXWI8CYUTUqIGC0wCv+9HaA=="
