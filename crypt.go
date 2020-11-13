@@ -9,20 +9,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type CreationRule struct {
+type sopsCreationRule struct {
 	PathRegex string          `json:"path_regex" yaml:"path_regex"`
 	KeyGroups []nicheKeyGroup `json:"key_groups" yaml:"key_groups"`
 }
 
-type Config struct {
-	CreationRules []CreationRule `json:"creation_rules" yaml:"creation_rules"`
+type sopsConfig struct {
+	CreationRules []sopsCreationRule `json:"creation_rules" yaml:"creation_rules"`
 }
 
 func keyGroupsFromKeyGroups(keyGroupsBlob []nicheKeyGroup) ([]sops.KeyGroup, error) {
-	// construct fake file with creation rule to hold keygroups
-	// this sucks, just to work around SOPS horrible api/codebase
-	fakeConfig := Config{
-		CreationRules: []CreationRule{
+	// construct fake file with creation rule to hold keygroups (just to get around SOPS)
+	fakeConfig := sopsConfig{
+		CreationRules: []sopsCreationRule{
 			{
 				PathRegex: ".*$",
 				KeyGroups: keyGroupsBlob,

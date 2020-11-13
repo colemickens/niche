@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func handle(c *Client, conn net.Conn, exit chan error) {
+func handle(c *nicheClient, conn net.Conn, alwaysOverwrite bool, exit chan error) {
 	defer func() {
 		fmt.Println("Closing connection...")
 		conn.Close()
@@ -40,7 +40,7 @@ func handle(c *Client, conn net.Conn, exit chan error) {
 		for _, storePath := range allStorePaths {
 			// check against our substituters
 			// if not, compress, make narinfo, upload both with stow
-			err = c.ensurePath(storePath)
+			err = c.ensurePath(storePath, alwaysOverwrite)
 			if err != nil {
 				exit <- err
 				return
@@ -54,7 +54,7 @@ func handle(c *Client, conn net.Conn, exit chan error) {
 // TODO: we need to write to a single queue
 // right now each build client get its own queue
 // which is also what cachix does and it seems bad
-func listen(c *Client, socketPath string) error {
+func listen(c *nicheClient, socketPath string, alwaysOverwrite bool) error {
 	if err := os.RemoveAll(socketPath); err != nil {
 		log.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func listen(c *Client, socketPath string) error {
 
 	exit := make(chan error)
 
-	handle(c, conn, exit)
+	handle(c, conn, alwaysOverwrite, exit)
 	//}
 	defer os.RemoveAll(socketPath)
 	return nil

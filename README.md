@@ -63,8 +63,13 @@ I'd like to replace Sops and then rewrite this in Rust using "Rops" or whatever 
 
 ## todo
 
+- resolve TODOs
 - lots of automated tests
 - it might help if we could get post-build-hook for all things, evne if not actually built locally
+
+- custom priority
+- force fix/overwrite mode
+- simpler "echo /nix/store/x | niche push foo.bar.com" invocation like cachix
 
 ## thanks
 

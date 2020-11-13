@@ -1,11 +1,8 @@
 package main
 
-/*
-basically this entire file should be replaced with
-better stuff from go-nix or go-wrapped https://github.com/andir/libnixstore-c
-*/
-
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,27 +16,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/numtide/go-nix/src/libstore"
 	"github.com/ulikunitz/xz"
 )
 
-type NixPathInfoOutput struct {
+type nixPathInfoOutput struct {
 	Path       string `json:"path"`
 	NarHash    string
-	NarSize    int
+	NarSize    int64
 	References []string
 	Deriver    string
 	Signatures []string
 }
 
-func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int) (*libstore.NarInfo, error) {
+// this is actually narInfo for storePath, and specific nar.......
+// we might just take filepath to nar instead of hash+Size
+func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (nar *narInfo, err error) {
 	pathInfoCmd := exec.Command("nix", "path-info", "--json", storePath)
 	pathInfoBytes, err := pathInfoCmd.Output()
 	if err != nil {
 		return nil, err
 	}
 
-	var info []NixPathInfoOutput
+	var info []nixPathInfoOutput
 	s := string(pathInfoBytes)
 	_ = s
 	err = json.Unmarshal(pathInfoBytes, &info)
@@ -47,9 +45,9 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int) (*lib
 		return nil, err
 	}
 
-	return &libstore.NarInfo{
+	return &narInfo{
 		URL:         narItemPath,
-		Compression: "xz", // TODO: this is hardcoded, function is less generic than named
+		Compression: "xz", // TODO: function is less generic than named
 		StorePath:   info[0].Path,
 		FileHash:    fileHash,
 		FileSize:    fileSize,
@@ -59,10 +57,6 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int) (*lib
 		Deriver:     info[0].Deriver,
 		Signatures:  info[0].Signatures,
 	}, nil
-}
-
-func generateSignatureWithKey(data, key string) (string, error) {
-	return "", nil
 }
 
 func nixDumpPath(storePath string) (string, error) {
@@ -98,6 +92,73 @@ func nixDumpPath(storePath string) (string, error) {
 	return tempFilePath, nil
 }
 
+func (ni *narInfo) AddSignature(privateKeyStr string) error {
+	// look for a sig with our prefix
+	// if not found calculate sig, add
+	parts := strings.Split(privateKeyStr, ":")
+	serverID, privateKey := parts[0], parts[1]
+
+	pkBytes, err := base64.StdEncoding.DecodeString(privateKey)
+	if err != nil {
+		return err
+	}
+
+	// TODO: this is getting parsed repeatedly
+	// we should do this earlier when we parse config
+	// or store them split out in the config
+	pk := ed25519.NewKeyFromSeed(pkBytes)
+
+	found := false
+	for _, curSig := range ni.Signatures {
+		if strings.Contains(curSig, serverID) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		fp := ni.Fingerprint()
+		sig := ed25519.Sign(pk, fp)
+		sigB64 := base64.StdEncoding.EncodeToString(sig)
+		ni.Signatures = append(ni.Signatures, string(sigB64))
+	}
+
+	return nil
+}
+
+func (ni *narInfo) Fingerprint() []byte {
+	// CACHIX
+	// https://github.com/cachix/cachix/blob/master/cachix-api/src/Cachix/API/Signing.hs#L21-L26
+	/*
+		fingerprint storePath narHash narSize references =
+			toS $
+				T.intercalate
+				";"
+				["1", storePath, narHash, show narSize, T.intercalate "," references]
+	*/
+
+	// NIX
+	// https://github.com/NixOS/nix/blob/7f56cf67bac3731ed8e217170eb548bf0fd2cfcb/src/libstore/store-api.cc#L918-L928
+	/*
+		return
+			"1;" + store.printStorePath(path) + ";"
+			+ narHash.to_string(Base32, true) + ";"
+			+ std::to_string(narSize) + ";"
+			+ concatStringsSep(",", store.printStorePathSet(references));
+	*/
+
+	fp := strings.Join(
+		[]string{
+			"1",
+			ni.StorePath,
+			ni.NarHash, // TODO: base32
+			fmt.Sprintf("%d", ni.NarSize),
+			strings.Join(ni.References, ","),
+		}, ",")
+
+	return []byte(fp)
+}
+
 func getAllStorePaths(storePath string) ([]string, error) {
 	// nix-store -q -R $storePath
 	cmd := exec.Command("nix-store", "-q", "-R", storePath)
@@ -119,9 +180,6 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	if err != nil {
 		return err
 	}
-
-	//postBuildHook := fmt.Sprintf("%s queue -s %s", self, socketPath)
-	//os.TempDir(), "pbh") // TODO: better
 
 	postBuildBody := fmt.Sprintf("#!/bin/sh\n%s queue -s %s", self, socketPath)
 	postBuildHookPath := "/tmp/pbh"

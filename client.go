@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/azure"
@@ -24,15 +26,15 @@ import (
 	"go.mozilla.org/sops/v3/version"
 )
 
-const WK_PRIVATE_CONFIG = ".well-known/niche-private-config"
+const wkPrivateConfig = ".well-known/niche-private-config"
 
-type Client struct {
+type nicheClient struct {
 	config        privateNicheConfig
 	stowClient    stow.Location
 	stowContainer stow.Container
 }
 
-func clientFromFile(pth string) (*Client, error) {
+func clientFromFile(pth string) (*nicheClient, error) {
 	f, err := os.Open(pth)
 	if err != nil {
 		return nil, err
@@ -45,21 +47,18 @@ func clientFromFile(pth string) (*Client, error) {
 	return clientFromBytes(byts)
 }
 
-func clientFromSops(cacheURL url.URL) (*Client, error) {
+func clientFromSops(cacheURL url.URL) (*nicheClient, error) {
 	// copy cacheURL and join path wi/ the config path-suffix
 	privateNicheConfigURL := cacheURL
-	privateNicheConfigURL.Path = path.Join(privateNicheConfigURL.Path, WK_PRIVATE_CONFIG)
-	// http get
+	privateNicheConfigURL.Path = path.Join(privateNicheConfigURL.Path, wkPrivateConfig)
 	resp, err := http.Get(privateNicheConfigURL.String())
 	if err != nil {
 		return nil, err
 	}
-	// read the resp
 	encryptedBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	// decrypt with sops
 	decryptedBytes, err := decrypt.Data(encryptedBytes, "binary")
 	if err != nil {
 		return nil, err
@@ -67,7 +66,7 @@ func clientFromSops(cacheURL url.URL) (*Client, error) {
 	return clientFromBytes(decryptedBytes)
 }
 
-func clientFromBytes(byts []byte) (*Client, error) {
+func clientFromBytes(byts []byte) (*nicheClient, error) {
 	var cfg privateNicheConfig
 	err := json.Unmarshal(byts, &cfg)
 	if err != nil {
@@ -76,7 +75,7 @@ func clientFromBytes(byts []byte) (*Client, error) {
 	return clientFromPrivateNicheConfig(cfg)
 }
 
-func clientFromPrivateNicheConfig(cfg privateNicheConfig) (*Client, error) {
+func clientFromPrivateNicheConfig(cfg privateNicheConfig) (*nicheClient, error) {
 	loc, err := stow.Dial(cfg.StorageKind, stow.ConfigMap(cfg.StorageConfigMap))
 	if err != nil {
 		return nil, err
@@ -87,7 +86,7 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig) (*Client, error) {
 		return nil, err
 	}
 
-	newClient := &Client{
+	newClient := &nicheClient{
 		config:        cfg,
 		stowClient:    loc,
 		stowContainer: cntr,
@@ -96,30 +95,28 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig) (*Client, error) {
 	return newClient, nil
 }
 
-func (c *Client) reuploadConfig() error {
+func (c *nicheClient) reuploadConfig() error {
 	decryptedNewCfgBytes, err := json.Marshal(c.config)
 	if err != nil {
 		return err
 	}
-
 	encNewCfgBytes, err := c.sopsEncrypt(decryptedNewCfgBytes)
 	if err != nil {
 		return err
 	}
-	// TOOD: re-encrypt!!!!
 	buf := bytes.NewBuffer(encNewCfgBytes)
-	_, err = c.stowContainer.Put(WK_PRIVATE_CONFIG, buf, int64(len(encNewCfgBytes)), nil)
+	_, err = c.stowContainer.Put(wkPrivateConfig, buf, int64(len(encNewCfgBytes)), nil)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Client) signNarPrint(print string) (string, error) {
+func (c *nicheClient) signNarPrint(print string) (string, error) {
 	return "", nil
 }
 
-func (c *Client) sopsEncrypt(fileBytes []byte) ([]byte, error) {
+func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 	inputStore := common.StoreForFormat(formats.FormatFromString("binary"))
 	outputStore := common.StoreForFormat(formats.FormatFromString("binary"))
 	sopsKeyGroups, err := keyGroupsFromKeyGroups(c.config.KeyGroups)
@@ -165,13 +162,14 @@ func (c *Client) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 	return encryptedFileBytes, nil
 }
 
-func (c *Client) ensurePath(storePath string) error {
+func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 	narPath, infoPath := narPathsFromStorePath(storePath)
 
 	_, errNarXz := c.stowContainer.Item(narPath)
 	_, errNarInfo := c.stowContainer.Item(infoPath)
 
-	if errNarXz != nil {
+	if errNarXz != nil || errNarInfo != nil || alwaysOverwrite {
+		// we need the NAR hash if we don't have (it in) the narinfo
 		compressedNarFilePath, err := nixDumpPath(storePath)
 		if err != nil {
 			return err
@@ -184,39 +182,44 @@ func (c *Client) ensurePath(storePath string) error {
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(compressedNarFilePath)
+		narSize := stat.Size()
+		narFile, err := os.Open(compressedNarFilePath)
 		if err != nil {
 			return err
 		}
-		item, err := c.stowContainer.Put(narPath, f, stat.Size(), nil)
+		narItem, err := c.stowContainer.Put(narPath, narFile, narSize, nil)
 		if err != nil {
 			return err
 		}
-		fmt.Println("uploaded", item)
-	}
+		fmt.Println("uploaded .nar.xz:", narItem)
 
-	if errNarInfo != nil {
-		signature := "" // TODO
+		hashCmd := exec.Command("nix", "hash-file", storePath)
+		hashBytes, err := hashCmd.Output()
+		fileHash := strings.Trim(string(hashBytes), " \r\n")
 
-		narInfo, err := nixPathInfo(storePath)
+		narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
 		if err != nil {
 			return err
 		}
-
-		narInfo.Signatures = []string{signature}
-		narInfo.Compression = "xz"
-		narInfo.URL = "TODO TODO TODO"
-		// narInfo.{System,FileSize,FileHash} ??
+		err = narInfo.AddSignature(c.config.SigningKey)
+		if err != nil {
+			return err
+		}
 
 		narInfoStr := narInfo.String()
 		narInfoRdr := bytes.NewBufferString(narInfoStr)
-		item, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
+		infoItem, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
 		if err != nil {
 			return err
 		}
-		fmt.Println("uploaded", item)
+		fmt.Println("uploaded narinfo:", infoItem)
 	}
 	return nil
+}
+
+func ensureNarInfoContainsSig(ni *narInfo, sig string) {
+	// TODO: better logic here
+	ni.Signatures = []string{sig}
 }
 
 func narPathsFromStorePath(storePath string) (string, string) {

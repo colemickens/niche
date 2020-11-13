@@ -59,7 +59,7 @@ func main() {
 				return err
 			}
 
-			var c *Client
+			var c *nicheClient
 			if argReconfigure.configFilePath != "" {
 				c, err = clientFromFile(argReconfigure.configFilePath)
 				if err != nil {
@@ -134,8 +134,10 @@ func main() {
 				}
 				defer c.stowClient.Close()
 
+				_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
+
 				// TODO: waitgroup + quit chan
-				go listen(c, socketPath)
+				go listen(c, socketPath, alwaysOverwrite)
 				if err != nil {
 					return err
 				}
