@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/ulikunitz/xz"
 )
@@ -145,7 +144,7 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 
 	_, err = cmd.Output()
 	if eerr, ok := err.(*exec.ExitError); ok {
-		fmt.Println(string(eerr.Stderr))
+		log.Println(string(eerr.Stderr))
 		panic(eerr)
 	}
 
@@ -158,10 +157,11 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	if err != nil {
 		return err
 	}
-
-	for {
-		time.Sleep(time.Second * 1)
+	log.Println("sent final build:", outLink)
+	_, err = c.Write([]byte("QUIT\n"))
+	if err != nil {
+		return err
 	}
-
+	log.Println("sent QUIT")
 	return nil
 }

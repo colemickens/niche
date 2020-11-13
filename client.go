@@ -191,7 +191,7 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("uploaded .nar.xz:", narItem)
+		fmt.Println("uploaded .nar.xz:", narItem.Name())
 
 		hashCmd := exec.Command("nix", "hash-file", storePath)
 		hashBytes, err := hashCmd.Output()
@@ -212,7 +212,7 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("uploaded narinfo:", infoItem)
+		fmt.Println("uploaded narinfo:", infoItem.Name())
 	}
 	return nil
 }

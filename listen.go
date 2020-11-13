@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func handle(c *nicheClient, conn net.Conn, alwaysOverwrite bool, exit chan error) {
+func handle(c *nicheClient, conn net.Conn, queue chan string) {
 	defer func() {
 		fmt.Println("Closing connection...")
 		conn.Close()
@@ -22,39 +22,35 @@ func handle(c *nicheClient, conn net.Conn, alwaysOverwrite bool, exit chan error
 		//conn.SetReadDeadline(time.Now().Add(timeoutDuration))
 		byts, err := bufReader.ReadBytes('\n')
 		if err != nil {
-			exit <- err
-			return
+			log.Println("uhhh BAD", err)
+			break
 		}
 		storePath := strings.TrimSpace(string(byts))
+		log.Println("received", storePath)
 
 		if storePath == "QUIT" {
+			log.Println("told to quit")
+			queue <- storePath
 			break
 		}
 
 		allStorePaths, err := getAllStorePaths(storePath)
 		if err != nil {
-			exit <- err
-			return
+			log.Println("uhhh BAD", err)
+			break
 		}
 
 		for _, storePath := range allStorePaths {
-			// check against our substituters
-			// if not, compress, make narinfo, upload both with stow
-			err = c.ensurePath(storePath, alwaysOverwrite)
-			if err != nil {
-				exit <- err
-				return
-			}
+			log.Println("propagating", storePath)
+			queue <- storePath
 		}
-		fmt.Println("handled all paths")
 	}
-	fmt.Printf("Quitting the listen loop for %s\n", conn.RemoteAddr())
 }
 
 // TODO: we need to write to a single queue
 // right now each build client get its own queue
 // which is also what cachix does and it seems bad
-func listen(c *nicheClient, socketPath string, alwaysOverwrite bool) error {
+func listen(c *nicheClient, socketPath string, queue chan string) error {
 	if err := os.RemoveAll(socketPath); err != nil {
 		log.Fatal(err)
 	}
@@ -65,18 +61,11 @@ func listen(c *nicheClient, socketPath string, alwaysOverwrite bool) error {
 	}
 	defer l.Close()
 
-	//for {
-	// Accept new connections, dispatching them to echoServer
-	// in a goroutine.
-	conn, err := l.Accept()
-	if err != nil {
-		log.Fatal("accept error:", err)
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal("accept error:", err)
+		}
+		go handle(c, conn, queue)
 	}
-
-	exit := make(chan error)
-
-	handle(c, conn, alwaysOverwrite, exit)
-	//}
-	defer os.RemoveAll(socketPath)
-	return nil
 }

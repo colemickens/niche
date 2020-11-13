@@ -3,17 +3,35 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
 	_ "github.com/graymeta/stow/google"
 	_ "github.com/graymeta/stow/s3"
 )
+
+func processBuildQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
+	wg.Add(1)
+	defer wg.Done()
+
+	for storePath := range queue {
+		if storePath == "QUIT" {
+			log.Println("leaving build queue")
+			return
+		}
+		log.Println("processing", storePath)
+		c.ensurePath(storePath, alwaysOverwrite)
+		// track that we have ensured this path so we can skip it next time
+		log.Println("done with", storePath)
+	}
+}
 
 func main() {
 	var rootCmd = &cobra.Command{Use: "niche"}
@@ -127,29 +145,31 @@ func main() {
 				}
 				defer os.RemoveAll(dir)
 				socketPath = filepath.Join(dir, "queue.sock")
-
-				c, err := clientFromSops(*cacheURL)
-				if err != nil {
-					return nil
-				}
-				defer c.stowClient.Close()
-
-				_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
-
-				// TODO: waitgroup + quit chan
-				go listen(c, socketPath, alwaysOverwrite)
-				if err != nil {
-					return err
-				}
 			}
+
+			c, err := clientFromSops(*cacheURL)
+			if err != nil {
+				return nil
+			}
+			defer c.stowClient.Close()
+
+			_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
+
+			wg := sync.WaitGroup{}
+			queue := make(chan string, 1000)
+
+			// start accepting clients
+			go listen(c, socketPath, queue)
+			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
 
 			err = build(*cacheURL, socketPath, extraArgs...)
 			if err != nil {
 				return err
 			}
 
-			// TODO: wait for listen
+			wg.Wait()
 
+			log.Println("all done")
 			return nil
 		},
 	}

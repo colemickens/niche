@@ -17,7 +17,7 @@
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceFolder}",
-            "env": {},
+            //"env": {"NICHE_OVERWRITE": true},
             "args": [
                 "build",
                 "-u", "https://azdev2020nov.blob.core.windows.net/cach3",
