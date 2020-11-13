@@ -25,7 +25,7 @@ func handle(c *nicheClient, conn net.Conn, alwaysOverwrite bool, exit chan error
 			exit <- err
 			return
 		}
-		storePath := strings.Trim(string(byts), " \r\n")
+		storePath := strings.TrimSpace(string(byts))
 
 		if storePath == "QUIT" {
 			break

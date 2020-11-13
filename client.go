@@ -195,7 +195,7 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 
 		hashCmd := exec.Command("nix", "hash-file", storePath)
 		hashBytes, err := hashCmd.Output()
-		fileHash := strings.Trim(string(hashBytes), " \r\n")
+		fileHash := strings.TrimSpace(string(hashBytes))
 
 		narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
 		if err != nil {

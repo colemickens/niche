@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,7 +52,7 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (na
 		NarHash:     info[0].NarHash,
 		NarSize:     info[0].NarSize,
 		References:  info[0].References,
-		Deriver:     info[0].Deriver,
+		Deriver:     filepath.Base(info[0].Deriver),
 		Signatures:  info[0].Signatures,
 	}, nil
 }
@@ -92,71 +90,13 @@ func nixDumpPath(storePath string) (string, error) {
 	return tempFilePath, nil
 }
 
-func (ni *narInfo) AddSignature(privateKeyStr string) error {
-	// look for a sig with our prefix
-	// if not found calculate sig, add
-	parts := strings.Split(privateKeyStr, ":")
-	serverID, privateKey := parts[0], parts[1]
-
-	pkBytes, err := base64.StdEncoding.DecodeString(privateKey)
+func nixToBase32(hash string) (string, error) {
+	cmd := exec.Command("nix", "to-base32", hash)
+	hashStrBytes, err := cmd.Output()
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	// TODO: this is getting parsed repeatedly
-	// we should do this earlier when we parse config
-	// or store them split out in the config
-	pk := ed25519.NewKeyFromSeed(pkBytes)
-
-	found := false
-	for _, curSig := range ni.Signatures {
-		if strings.Contains(curSig, serverID) {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		fp := ni.Fingerprint()
-		sig := ed25519.Sign(pk, fp)
-		sigB64 := base64.StdEncoding.EncodeToString(sig)
-		ni.Signatures = append(ni.Signatures, string(sigB64))
-	}
-
-	return nil
-}
-
-func (ni *narInfo) Fingerprint() []byte {
-	// CACHIX
-	// https://github.com/cachix/cachix/blob/master/cachix-api/src/Cachix/API/Signing.hs#L21-L26
-	/*
-		fingerprint storePath narHash narSize references =
-			toS $
-				T.intercalate
-				";"
-				["1", storePath, narHash, show narSize, T.intercalate "," references]
-	*/
-
-	// NIX
-	// https://github.com/NixOS/nix/blob/7f56cf67bac3731ed8e217170eb548bf0fd2cfcb/src/libstore/store-api.cc#L918-L928
-	/*
-		return
-			"1;" + store.printStorePath(path) + ";"
-			+ narHash.to_string(Base32, true) + ";"
-			+ std::to_string(narSize) + ";"
-			+ concatStringsSep(",", store.printStorePathSet(references));
-	*/
-
-	fp := strings.Join(
-		[]string{
-			"1",
-			ni.StorePath,
-			ni.NarHash, // TODO: base32
-			fmt.Sprintf("%d", ni.NarSize),
-			strings.Join(ni.References, ","),
-		}, ",")
-
-	return []byte(fp)
+	return strings.TrimSpace(string(hashStrBytes)), nil
 }
 
 func getAllStorePaths(storePath string) ([]string, error) {
