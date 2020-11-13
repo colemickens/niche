@@ -63,8 +63,14 @@ I'd like to replace Sops and then rewrite this in Rust using "Rops" or whatever 
 
 ## todo
 
-- resolve TODOs
+- filesizes?
+- narinfo/nar suffixes?
+
+- skip list
+- logging
 - lots of automated tests
+- resolve TODOs
+
 - it might help if we could get post-build-hook for all things, evne if not actually built locally
 
 - custom priority

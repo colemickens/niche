@@ -20,9 +20,10 @@
             //"env": {"NICHE_OVERWRITE": true},
             "args": [
                 "build",
-                "-u", "https://azdev2020nov.blob.core.windows.net/cach3",
+                "-u", "https://azdev2020nov.blob.core.windows.net/cache",
                 "--",
-                "/home/cole/code/flake-impure", "--impure"
+                //"/home/cole/code/flake-impure", "--impure"
+                "/home/cole/code/nixpkgs-wayland#defaultPackage.x86_64-linux"
             ]
         },
         {
@@ -34,8 +35,8 @@
             "env": {},
             "args": [
                 "reconfigure",
-                "-u", "https://azdev2020nov.blob.core.windows.net/cach3",
-                "-c", "./examples/azure-niche-config"
+                "-u", "https://azdev2020nov.blob.core.windows.net/cache",
+                "-c", "./tests/azure.secret.json"
             ]
         }
     ]
