@@ -13,23 +13,41 @@ import (
 
 	"github.com/spf13/cobra"
 
+	_ "github.com/graymeta/stow/azure"
+	_ "github.com/graymeta/stow/b2"
 	_ "github.com/graymeta/stow/google"
+	_ "github.com/graymeta/stow/oracle"
 	_ "github.com/graymeta/stow/s3"
+	_ "github.com/graymeta/stow/sftp"
+	_ "github.com/graymeta/stow/swift"
 )
+
+func preprocessHost(host string) (*url.URL, error) {
+	if !strings.HasPrefix(host, "https://") || !strings.HasPrefix(host, "http://") {
+		host = "https://" + host
+	}
+	return url.Parse(host)
+}
 
 func processBuildQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
 	wg.Add(1)
 	defer wg.Done()
+
+	seenPaths := []string{}
 
 	for storePath := range queue {
 		if storePath == "QUIT" {
 			log.Println("leaving build queue")
 			return
 		}
-		log.Println("processing", storePath)
+		for _, seenPath := range seenPaths {
+			if strings.EqualFold(storePath, seenPath) {
+				continue
+			}
+		}
 		c.ensurePath(storePath, alwaysOverwrite)
-		// track that we have ensured this path so we can skip it next time
-		log.Println("done with", storePath)
+		seenPaths = append(seenPaths, storePath)
+		log.Println("ensured", storePath)
 	}
 }
 
@@ -72,7 +90,7 @@ func main() {
 	var cmdReconfigure = &cobra.Command{
 		Use: "reconfigure",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheURL, err := url.Parse(argReconfigure.cache)
+			cacheURL, err := preprocessHost(argReconfigure.cache)
 			if err != nil {
 				return err
 			}
@@ -131,7 +149,7 @@ func main() {
 			extraArgs := args
 			_ = extraArgs // TODO: Fix this
 
-			cacheURL, err := url.Parse(argBuild.cache)
+			cacheURL, err := preprocessHost(argBuild.cache)
 			if err != nil {
 				return err
 			}

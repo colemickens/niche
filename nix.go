@@ -44,7 +44,7 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (na
 
 	return &narInfo{
 		URL:         narItemPath,
-		Compression: "xz", // TODO: function is less generic than named
+		Compression: "xz", // TODO: derive from narItemPath suffix
 		StorePath:   info[0].Path,
 		FileHash:    fileHash,
 		FileSize:    fileSize,
@@ -54,6 +54,13 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (na
 		Deriver:     filepath.Base(info[0].Deriver),
 		Signatures:  info[0].Signatures,
 	}, nil
+}
+
+func nixHashFile(storePath string) (hash string, err error) {
+	hashCmd := exec.Command("nix", "hash-file", storePath)
+	hashBytes, err := hashCmd.Output()
+	fileHash := strings.TrimSpace(string(hashBytes))
+	return fileHash, nil
 }
 
 func nixDumpPath(storePath string) (string, error) {
@@ -77,7 +84,11 @@ func nixDumpPath(storePath string) (string, error) {
 		return "", err
 	}
 	go func() {
-		io.Copy(xzWriter, dumpCmdStdout)
+		n, err := io.Copy(xzWriter, dumpCmdStdout)
+		if err != nil {
+			log.Fatalln("error copying the xz stream to file")
+		}
+		log.Println("copied bytes to file from xz stream:", n)
 	}()
 	dumpCmd.Start()
 	if err := dumpCmd.Wait(); err != nil {

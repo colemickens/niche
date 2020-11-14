@@ -9,10 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/azure"
@@ -163,6 +161,18 @@ func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 }
 
 func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
+	// TODO: which first, maybe better to upload nar.xz then narinfo so we're sure
+	// we can treat narinfo as sentinel?
+	//
+	// TODO:
+	// - it might be more approrpriate to:
+	//  - get narinfo from server
+	//  - follow URL field to NAR
+	//  - check NAR exists
+	// - if not,
+	//  - hash NAR
+	//  - use NAR hash to write URL/FileHash into the narinfo
+	//  - this way we follow how cachix.org narinfo files look
 	narPath, infoPath := narPathsFromStorePath(storePath)
 
 	_, errNarXz := c.stowContainer.Item(narPath)
@@ -193,9 +203,7 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 		}
 		fmt.Println("uploaded .nar.xz:", narItem.Name())
 
-		hashCmd := exec.Command("nix", "hash-file", storePath)
-		hashBytes, err := hashCmd.Output()
-		fileHash := strings.TrimSpace(string(hashBytes))
+		fileHash, err := nixHashFile(storePath)
 
 		narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
 		if err != nil {
