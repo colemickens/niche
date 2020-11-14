@@ -13,6 +13,7 @@ type nicheKeyGroup map[string][]string
 
 type privateNicheConfig struct {
 	SigningKey       string            `json:"signingKey"`
+	PublicKey        string            `json:"publicKey"`
 	StorageKind      string            `json:"storageKind"`      // TODO: stow's Kind
 	StorageContainer string            `json:"storageContainer"` // TODO: stow's Kind
 	StorageConfigMap map[string]string `json:"storageConfigMap"` // lazy, just let it hand off to Stow

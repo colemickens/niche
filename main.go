@@ -59,7 +59,7 @@ func main() {
 	}
 	var cmdQueue = &cobra.Command{
 		Use:    "queue",
-		Hidden: true,
+		Hidden: true, // this, for now, is only used internally as the post-build-hook from `niche build` -> `nix build`
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outPathsStr := os.Getenv("OUT_PATHS")
 			outPaths := strings.Split(outPathsStr, " ")
@@ -83,14 +83,63 @@ func main() {
 	cmdQueue.PersistentFlags().StringVarP(&argQueue.socketPath, "socket", "s", "", "path of the socket to write paths to")
 	rootCmd.AddCommand(cmdQueue)
 
+	var argInit struct {
+		kind           string
+		gpgFingerprint string
+	}
+	var cmdInit = &cobra.Command{
+		Use:    "init",
+		Hidden: true,
+		Args:   cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cacheName := args[1]
+
+			privateKeyStr, publicKeyStr, err := nixStoreGenerateBinaryCacheKey(cacheName)
+			if err != nil {
+				return err
+			}
+
+			configMap, err := getInitialStorageConfigMap(argInit.kind)
+			if err != nil {
+				return err
+			}
+
+			newConfig := privateNicheConfig{
+				StorageKind:      argInit.kind,
+				SigningKey:       privateKeyStr,
+				PublicKey:        publicKeyStr,
+				StorageContainer: argInit.kind + "_CONTAINER_NAME_HERE",
+				StorageConfigMap: configMap,
+				KeyGroups:        []nicheKeyGroup{{"pgp": []string{argInit.gpgFingerprint}}},
+			}
+
+			data, err := json.MarshalIndent(newConfig, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			// TODO: do the reconfigure dance now where we let them edit the file
+			// maybe keep them in a loop??? IDK
+
+			ioutil.WriteFile("/tmp/foo", data, 0644)
+
+			return nil
+		},
+	}
+	cmdInit.PersistentFlags().StringVarP(&argInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
+	cmdInit.PersistentFlags().StringVarP(&argInit.gpgFingerprint, "fingerprint", "f", "", "the gpg fingerprint(s) to use for encrypting/decrypting the config (comma separated)")
+	rootCmd.AddCommand(cmdInit)
+
 	var argReconfigure struct {
-		cache          string
+		//cache          string
 		configFilePath string
 	}
 	var cmdReconfigure = &cobra.Command{
 		Use: "reconfigure",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheURL, err := preprocessHost(argReconfigure.cache)
+			cacheURLStr := args[0]
+			//cacheURL, err := preprocessHost(argReconfigure.cache)
+			cacheURL, err := preprocessHost(cacheURLStr)
 			if err != nil {
 				return err
 			}
@@ -134,22 +183,26 @@ func main() {
 			return nil
 		},
 	}
-	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.cache, "cache-url", "u", "", "cache url")
-	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.configFilePath, "config-file", "c", "", "path to config file to init/force overwrite")
+	//cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.cache, "cache-url", "u", "", "cache url")
+	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.configFilePath, "config", "c", "", "path to config file to init/force overwrite")
 	rootCmd.AddCommand(cmdReconfigure)
 
-	var argBuild struct {
-		cache string
-	}
+	// var argBuild struct {
+	// 	cache string
+	// }
 	var cmdBuild = &cobra.Command{
 		Use:   "build",
 		Short: "builds an INSTALLABLE and uploads each output as they're built",
-		Args:  cobra.MinimumNArgs(0),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
-			extraArgs := args
-			_ = extraArgs // TODO: Fix this
+			cacheURLStr := args[0]
+			extraArgs := []string{}
+			if len(args) > 1 {
+				extraArgs = args[1:]
+			}
 
-			cacheURL, err := preprocessHost(argBuild.cache)
+			cacheURL, err := preprocessHost(cacheURLStr)
+			//cacheURL, err := preprocessHost(argBuild.cache)
 			if err != nil {
 				return err
 			}
@@ -180,7 +233,7 @@ func main() {
 			go listen(c, socketPath, queue)
 			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
 
-			err = build(*cacheURL, socketPath, extraArgs...)
+			err = nixBuild(*cacheURL, socketPath, extraArgs...)
 			if err != nil {
 				return err
 			}
@@ -191,8 +244,65 @@ func main() {
 			return nil
 		},
 	}
-	cmdBuild.PersistentFlags().StringVarP(&argBuild.cache, "cache-url", "u", "", "cache url")
+	//cmdBuild.PersistentFlags().StringVarP(&argBuild.cache, "cache-url", "u", "", "cache url")
 	rootCmd.AddCommand(cmdBuild)
+
+	var argUpload struct {
+		cache string
+	}
+	var cmdUpload = &cobra.Command{
+		Use:   "build",
+		Short: "builds an INSTALLABLE and uploads each output as they're built",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cobraCmd *cobra.Command, args []string) error {
+			extraArgs := args
+			_ = extraArgs // TODO: Fix this
+
+			cacheURL, err := preprocessHost(argUpload.cache)
+			if err != nil {
+				return err
+			}
+
+			//socketPath := argUpload.socketPath
+			socketPath := ""
+			if socketPath == "" {
+				dir, err := ioutil.TempDir("", "niche")
+				if err != nil {
+					return err
+				}
+				defer os.RemoveAll(dir)
+				socketPath = filepath.Join(dir, "queue.sock")
+			}
+
+			c, err := clientFromSops(*cacheURL)
+			if err != nil {
+				return nil
+			}
+			defer c.stowClient.Close()
+
+			_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
+
+			wg := sync.WaitGroup{}
+			queue := make(chan string, 1000)
+
+			// start accepting clients
+			go listen(c, socketPath, queue)
+			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
+
+			err = nixBuild(*cacheURL, socketPath, extraArgs...)
+			if err != nil {
+				return err
+			}
+
+			wg.Wait()
+
+			log.Println("all done")
+			return nil
+		},
+	}
+	rootCmd.AddCommand(cmdUpload)
+
+	// TODO: handle no subcommand w/ stdin "echo foo | niche cache.org"
 
 	rootCmd.Execute()
 }

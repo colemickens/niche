@@ -125,7 +125,7 @@ func getAllStorePaths(storePath string) ([]string, error) {
 	return outputStrings, nil
 }
 
-func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
+func nixBuild(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -175,4 +175,11 @@ func build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	}
 	log.Println("sent QUIT")
 	return nil
+}
+
+func nixStoreGenerateBinaryCacheKey(cacheName string) (string, string, error) {
+	// make temp dir
+	// call it in that dir
+	// TODO: shred that temp dir
+	return "", "", fmt.Errorf("not implemented")
 }

@@ -19,9 +19,7 @@
             "program": "${workspaceFolder}",
             "env": {"NICHE_OVERWRITE": true},
             "args": [
-                "build",
-                "-u", "https://azdev2020nov.blob.core.windows.net/cache",
-                "--",
+                "build", "https://azdev2020nov.blob.core.windows.net/cache", "--",
                 //"/home/cole/code/flake-impure", "--impure"
                 "/home/cole/code/nixpkgs-wayland#defaultPackage.x86_64-linux"
             ]
