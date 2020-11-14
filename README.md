@@ -80,6 +80,15 @@ In a dream world, Sops would get a RIIR, with a more limited feature-set, akin, 
 And then the toplevel package should have `Providers()` or `Provider()`. Then there could be an interface `ConfigWithMap()` to take a `map[string]string`, etc.
 This would nicely increase the ability to make tooling around Stow itself.
 
+## code layout
+
+- `client.go`: code related interacting with the remote storage repo, including handling encrypting the config
+- `config.go`: the niche config structures and functions
+- `crypt.go`: code to convert our own keygroups into keygroups sops expects, and the code to call sops
+- `listen.go`: this is the code that listens on the domain socket
+- `narinfo.go`: functions to create narinfo files and generating a signature for a NAR path/archive
+- `nix.go`: functions that do `nix` commands or other store operations
+
 ## todo (pre-release)
 
 - figure out why xz stream is failing at times

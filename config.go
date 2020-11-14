@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -76,4 +77,62 @@ func CaptureInputFromEditor(initialContents []byte) ([]byte, error) {
 	}
 
 	return bytes, nil
+}
+
+func fromEnvOrDefault(varname string) string {
+	result := os.Getenv(varname)
+	if result == "" {
+		return "__" + varname + "__"
+	}
+	return result
+}
+
+func getInitialStorageConfigMap(kind string) (map[string]string, error) {
+	switch kind {
+	case "azure":
+		return map[string]string{
+			"account": fromEnvOrDefault("AZURE_STORAGE_ACCOUNT_NAME"),
+			"key":     fromEnvOrDefault("AZURE_STORAGE_ACCESS_KEY"),
+		}, nil
+	case "s3":
+		return map[string]string{
+			"auth_type":     fromEnvOrDefault("S3_AUTH_TYPE"),
+			"access_key_id": fromEnvOrDefault("S3_ACCESS_KEY_ID"),
+			"secret_key":    fromEnvOrDefault("S3_SECRET_KEY"),
+			"region":        fromEnvOrDefault("S3_REGION"),
+			"endpoint":      fromEnvOrDefault("S3_ENDPOINT"),
+			"disable_ssl":   fromEnvOrDefault("S3_DISABLE_SSL"),
+			"v2_signing":    fromEnvOrDefault("S3_SIGNING"),
+		}, nil
+	case "swift":
+		return map[string]string{
+			"username":        fromEnvOrDefault("SWIFT_USERNAME"),
+			"key":             fromEnvOrDefault("SWIFT_KEY"),
+			"tenant_name":     fromEnvOrDefault("SWIFT_TENANT_NAME"),
+			"tenant_auth_url": fromEnvOrDefault("SWIFT_TENANT_AUTH_URL"),
+		}, nil
+	case "oracle":
+		return map[string]string{
+			"username":        fromEnvOrDefault("ORACLE_USERNAME"),
+			"key":             fromEnvOrDefault("ORACLE_KEY"),
+			"tenant_name":     fromEnvOrDefault("ORACLE_TENANT_NAME"),
+			"tenant_auth_url": fromEnvOrDefault("ORACLE_TENANT_AUTH_URL"),
+		}, nil
+	case "google":
+		return map[string]string{
+			"username":        fromEnvOrDefault("GOOGLE_USERNAME"),
+			"key":             fromEnvOrDefault("GOOGLE_KEY"),
+			"tenant_name":     fromEnvOrDefault("GOOGLE_TENANT_NAME"),
+			"tenant_auth_url": fromEnvOrDefault("GOOGLE_TENANT_AUTH_URL"),
+		}, nil
+	case "b2":
+		return map[string]string{
+			"username":        fromEnvOrDefault("B2_USERNAME"),
+			"key":             fromEnvOrDefault("B2_KEY"),
+			"tenant_name":     fromEnvOrDefault("B2_TENANT_NAME"),
+			"tenant_auth_url": fromEnvOrDefault("B2_TENANT_AUTH_URL"),
+		}, nil
+	}
+
+	return nil, fmt.Errorf("unsupported kind for init: %s", kind)
 }

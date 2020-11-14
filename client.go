@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/azure"
@@ -23,6 +27,8 @@ import (
 	"go.mozilla.org/sops/v3/decrypt"
 	"go.mozilla.org/sops/v3/version"
 )
+
+// TODO: I probably need lots of locking around the client here since it's getting hit up from multiple places
 
 const wkPrivateConfig = ".well-known/niche-private-config"
 
@@ -225,14 +231,93 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 	return nil
 }
 
-func ensureNarInfoContainsSig(ni *narInfo, sig string) {
-	// TODO: better logic here
-	ni.Signatures = []string{sig}
+// TODO: we need to write to a single queue
+// right now each build client get its own queue
+// which is also what cachix does and it seems bad
+func (c *nicheClient) listen(socketPath string, queue chan string) error {
+	if err := os.RemoveAll(socketPath); err != nil {
+		log.Fatal(err)
+	}
+
+	l, err := net.Listen("unix", socketPath)
+	if err != nil {
+		log.Fatal("listen error:", err)
+	}
+	defer l.Close()
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal("accept error:", err)
+		}
+		go handle(c, conn, queue)
+	}
+}
+
+func handle(c *nicheClient, conn net.Conn, queue chan string) {
+	defer func() {
+		fmt.Println("Closing connection...")
+		conn.Close()
+	}()
+
+	//timeoutDuration := 1000 * time.Second // TODO?
+	bufReader := bufio.NewReader(conn)
+
+	for {
+		//conn.SetReadDeadline(time.Now().Add(timeoutDuration))
+		byts, err := bufReader.ReadBytes('\n')
+		if err != nil {
+			log.Println("uhhh BAD", err)
+			break
+		}
+		storePath := strings.TrimSpace(string(byts))
+		log.Println("received", storePath)
+
+		if storePath == "QUIT" {
+			log.Println("told to quit")
+			queue <- storePath
+			break
+		}
+
+		allStorePaths, err := getAllStorePaths(storePath)
+		if err != nil {
+			log.Println("uhhh BAD", err)
+			break
+		}
+
+		for _, storePath := range allStorePaths {
+			log.Println("propagating", storePath)
+			queue <- storePath
+		}
+	}
+}
+
+func (c *nicheClient) processBuildQueue(queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
+	wg.Add(1)
+	defer wg.Done()
+
+	seenPaths := []string{}
+
+	for storePath := range queue {
+		if storePath == "QUIT" {
+			log.Println("leaving build queue")
+			return
+		}
+		for _, seenPath := range seenPaths {
+			if strings.EqualFold(storePath, seenPath) {
+				continue
+			}
+		}
+		c.ensurePath(storePath, alwaysOverwrite)
+		seenPaths = append(seenPaths, storePath)
+		log.Println("ensured", storePath)
+	}
 }
 
 func narPathsFromStorePath(storePath string) (string, string) {
 	storePathBase := filepath.Base(storePath)
 	narPath := fmt.Sprintf("nars/%s.nar.xz", storePathBase)
 	infoPath := storePathBase + ".narinfo"
+	// TODO: write test for this (that should currently fail)
 	return narPath, infoPath
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -18,37 +19,14 @@ import (
 	_ "github.com/graymeta/stow/google"
 	_ "github.com/graymeta/stow/oracle"
 	_ "github.com/graymeta/stow/s3"
-	_ "github.com/graymeta/stow/sftp"
 	_ "github.com/graymeta/stow/swift"
 )
 
-func preprocessHost(host string) (*url.URL, error) {
+func preprocessHostArg(host string) (*url.URL, error) {
 	if !strings.HasPrefix(host, "https://") || !strings.HasPrefix(host, "http://") {
 		host = "https://" + host
 	}
 	return url.Parse(host)
-}
-
-func processBuildQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
-	wg.Add(1)
-	defer wg.Done()
-
-	seenPaths := []string{}
-
-	for storePath := range queue {
-		if storePath == "QUIT" {
-			log.Println("leaving build queue")
-			return
-		}
-		for _, seenPath := range seenPaths {
-			if strings.EqualFold(storePath, seenPath) {
-				continue
-			}
-		}
-		c.ensurePath(storePath, alwaysOverwrite)
-		seenPaths = append(seenPaths, storePath)
-		log.Println("ensured", storePath)
-	}
 }
 
 func main() {
@@ -85,6 +63,7 @@ func main() {
 
 	var argInit struct {
 		kind           string
+		container      string
 		gpgFingerprint string
 	}
 	var cmdInit = &cobra.Command{
@@ -93,12 +72,13 @@ func main() {
 		Args:   cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cacheName := args[1]
-
+			if argInit.kind == "" || argInit.container == "" || argInit.gpgFingerprint == "" {
+				log.Fatalln("kind, fingerprint, and container must all be specified")
+			}
 			privateKeyStr, publicKeyStr, err := nixStoreGenerateBinaryCacheKey(cacheName)
 			if err != nil {
 				return err
 			}
-
 			configMap, err := getInitialStorageConfigMap(argInit.kind)
 			if err != nil {
 				return err
@@ -108,7 +88,7 @@ func main() {
 				StorageKind:      argInit.kind,
 				SigningKey:       privateKeyStr,
 				PublicKey:        publicKeyStr,
-				StorageContainer: argInit.kind + "_CONTAINER_NAME_HERE",
+				StorageContainer: argInit.container,
 				StorageConfigMap: configMap,
 				KeyGroups:        []nicheKeyGroup{{"pgp": []string{argInit.gpgFingerprint}}},
 			}
@@ -121,17 +101,26 @@ func main() {
 			// TODO: do the reconfigure dance now where we let them edit the file
 			// maybe keep them in a loop??? IDK
 
+			//
+			//
+			//
+			//
+			//
+			//
+			//
+			//
+
 			ioutil.WriteFile("/tmp/foo", data, 0644)
 
 			return nil
 		},
 	}
 	cmdInit.PersistentFlags().StringVarP(&argInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
+	cmdInit.PersistentFlags().StringVarP(&argInit.kind, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
 	cmdInit.PersistentFlags().StringVarP(&argInit.gpgFingerprint, "fingerprint", "f", "", "the gpg fingerprint(s) to use for encrypting/decrypting the config (comma separated)")
 	rootCmd.AddCommand(cmdInit)
 
 	var argReconfigure struct {
-		//cache          string
 		configFilePath string
 	}
 	var cmdReconfigure = &cobra.Command{
@@ -139,7 +128,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cacheURLStr := args[0]
 			//cacheURL, err := preprocessHost(argReconfigure.cache)
-			cacheURL, err := preprocessHost(cacheURLStr)
+			cacheURL, err := preprocessHostArg(cacheURLStr)
 			if err != nil {
 				return err
 			}
@@ -155,8 +144,6 @@ func main() {
 				if err != nil {
 					return err
 				}
-				// TODO: does it make sense to deserialize and then reserialize?
-				//  -   we could just hold onto the raw bytes when we load+parse?
 				oldBytes, err := json.Marshal(c.config)
 				if err != nil {
 					return err
@@ -165,7 +152,6 @@ func main() {
 				if err != nil {
 					return err
 				}
-				// update client with a new one built from the new config
 				c, err = clientFromBytes(newConfigBytes)
 				if err != nil {
 					return err
@@ -174,7 +160,6 @@ func main() {
 			defer c.stowClient.Close()
 
 			// TODO: sanity check, warn if keys change?
-
 			err = c.reuploadConfig()
 			if err != nil {
 				return err
@@ -183,7 +168,6 @@ func main() {
 			return nil
 		},
 	}
-	//cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.cache, "cache-url", "u", "", "cache url")
 	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.configFilePath, "config", "c", "", "path to config file to init/force overwrite")
 	rootCmd.AddCommand(cmdReconfigure)
 
@@ -201,7 +185,7 @@ func main() {
 				extraArgs = args[1:]
 			}
 
-			cacheURL, err := preprocessHost(cacheURLStr)
+			cacheURL, err := preprocessHostArg(cacheURLStr)
 			//cacheURL, err := preprocessHost(argBuild.cache)
 			if err != nil {
 				return err
@@ -230,8 +214,8 @@ func main() {
 			queue := make(chan string, 1000)
 
 			// start accepting clients
-			go listen(c, socketPath, queue)
-			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
+			go c.listen(socketPath, queue)
+			go c.processBuildQueue(queue, &wg, alwaysOverwrite)
 
 			err = nixBuild(*cacheURL, socketPath, extraArgs...)
 			if err != nil {
@@ -247,31 +231,17 @@ func main() {
 	//cmdBuild.PersistentFlags().StringVarP(&argBuild.cache, "cache-url", "u", "", "cache url")
 	rootCmd.AddCommand(cmdBuild)
 
-	var argUpload struct {
-		cache string
-	}
 	var cmdUpload = &cobra.Command{
-		Use:   "build",
-		Short: "builds an INSTALLABLE and uploads each output as they're built",
+		Use:   "upload",
+		Short: "uploads paths piped into standard in",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
-			extraArgs := args
-			_ = extraArgs // TODO: Fix this
+			cacheURLStr := args[0]
 
-			cacheURL, err := preprocessHost(argUpload.cache)
+			cacheURL, err := preprocessHostArg(cacheURLStr)
+			//cacheURL, err := preprocessHost(argBuild.cache)
 			if err != nil {
 				return err
-			}
-
-			//socketPath := argUpload.socketPath
-			socketPath := ""
-			if socketPath == "" {
-				dir, err := ioutil.TempDir("", "niche")
-				if err != nil {
-					return err
-				}
-				defer os.RemoveAll(dir)
-				socketPath = filepath.Join(dir, "queue.sock")
 			}
 
 			c, err := clientFromSops(*cacheURL)
@@ -282,27 +252,28 @@ func main() {
 
 			_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
 
-			wg := sync.WaitGroup{}
-			queue := make(chan string, 1000)
+			//timeoutDuration := 1000 * time.Second // TODO?
+			bufReader := bufio.NewReader(os.Stdin)
 
-			// start accepting clients
-			go listen(c, socketPath, queue)
-			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
+			for {
+				byts, err := bufReader.ReadBytes('\n')
+				if err != nil {
+					log.Println("uhhh BAD", err)
+					break
+				}
 
-			err = nixBuild(*cacheURL, socketPath, extraArgs...)
-			if err != nil {
-				return err
+				storePath := strings.TrimSpace(string(byts))
+				log.Println("received", storePath)
+
+				if err = c.ensurePath(storePath, alwaysOverwrite); err != nil {
+					log.Fatalln("failed to push", storePath)
+				}
 			}
 
-			wg.Wait()
-
-			log.Println("all done")
 			return nil
 		},
 	}
 	rootCmd.AddCommand(cmdUpload)
-
-	// TODO: handle no subcommand w/ stdin "echo foo | niche cache.org"
 
 	rootCmd.Execute()
 }
