@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +19,7 @@ import (
 	_ "github.com/graymeta/stow/azure"
 	_ "github.com/graymeta/stow/google"
 	_ "github.com/graymeta/stow/s3"
+	"github.com/rs/zerolog/log"
 	sops "go.mozilla.org/sops/v3"
 	"go.mozilla.org/sops/v3/aes"
 	"go.mozilla.org/sops/v3/cmd/sops/common"
@@ -47,7 +47,6 @@ func clientFromFile(pth string) (*nicheClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(byts))
 	return clientFromBytes(byts)
 }
 
@@ -167,67 +166,59 @@ func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 }
 
 func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
-	// TODO: which first, maybe better to upload nar.xz then narinfo so we're sure
-	// we can treat narinfo as sentinel?
-	//
-	// TODO:
-	// - it might be more approrpriate to:
-	//  - get narinfo from server
-	//  - follow URL field to NAR
-	//  - check NAR exists
-	// - if not,
-	//  - hash NAR
-	//  - use NAR hash to write URL/FileHash into the narinfo
-	//  - this way we follow how cachix.org narinfo files look
-	narPath, infoPath := narPathsFromStorePath(storePath)
+	log.Trace().Str("storePath", storePath).Msg("checking path")
 
+	narPath, infoPath := narPathsFromStorePath(storePath)
 	_, errNarXz := c.stowContainer.Item(narPath)
 	_, errNarInfo := c.stowContainer.Item(infoPath)
-
-	if errNarXz != nil || errNarInfo != nil || alwaysOverwrite {
-		// we need the NAR hash if we don't have (it in) the narinfo
-		compressedNarFilePath, err := nixDumpPath(storePath)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			log.Println("removing", compressedNarFilePath)
-			os.Remove(compressedNarFilePath)
-		}()
-		stat, err := os.Stat(compressedNarFilePath)
-		if err != nil {
-			return err
-		}
-		narSize := stat.Size()
-		narFile, err := os.Open(compressedNarFilePath)
-		if err != nil {
-			return err
-		}
-		narItem, err := c.stowContainer.Put(narPath, narFile, narSize, nil)
-		if err != nil {
-			return err
-		}
-		fmt.Println("uploaded .nar.xz:", narItem.Name())
-
-		fileHash, err := nixHashFile(storePath)
-
-		narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
-		if err != nil {
-			return err
-		}
-		err = narInfo.AddSignature(c.config.SigningKey)
-		if err != nil {
-			return err
-		}
-
-		narInfoStr := narInfo.String()
-		narInfoRdr := bytes.NewBufferString(narInfoStr)
-		infoItem, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
-		if err != nil {
-			return err
-		}
-		fmt.Println("uploaded narinfo:", infoItem.Name())
+	if errNarXz == nil && errNarInfo == nil && !alwaysOverwrite {
+		log.Trace().Str("storePath", storePath).Msg("skipping path")
+		return nil
 	}
+
+	// we need the NAR hash if we don't have (it in) the narinfo
+	compressedNarFilePath, err := nixDumpPath(storePath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		log.Trace().Str("storePath", storePath).Msg("cleaning tmp compressed nar")
+		os.Remove(compressedNarFilePath)
+	}()
+	stat, err := os.Stat(compressedNarFilePath)
+	if err != nil {
+		return err
+	}
+	narSize := stat.Size()
+	narFile, err := os.Open(compressedNarFilePath)
+	if err != nil {
+		return err
+	}
+	narItem, err := c.stowContainer.Put(narPath, narFile, narSize, nil)
+	if err != nil {
+		return err
+	}
+	log.Info().Str("path", narItem.Name()).Msg("uploaded path")
+
+	fileHash, err := nixHashFile(storePath)
+
+	narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
+	if err != nil {
+		return err
+	}
+	err = narInfo.AddSignature(c.config.SigningKey)
+	if err != nil {
+		return err
+	}
+
+	narInfoStr := narInfo.String()
+	narInfoRdr := bytes.NewBufferString(narInfoStr)
+	infoItem, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
+	if err != nil {
+		return err
+	}
+	log.Info().Str("path", infoItem.Name()).Msg("uploaded path")
+
 	return nil
 }
 
@@ -236,19 +227,19 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 // which is also what cachix does and it seems bad
 func (c *nicheClient) listen(socketPath string, queue chan string) error {
 	if err := os.RemoveAll(socketPath); err != nil {
-		log.Fatal(err)
+		log.Err(err).Str("path", socketPath).Msg("failed to clean up socket ahead of time")
 	}
 
 	l, err := net.Listen("unix", socketPath)
 	if err != nil {
-		log.Fatal("listen error:", err)
+		log.Err(err).Msg("failed to listen")
 	}
 	defer l.Close()
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Fatal("accept error:", err)
+			log.Err(err).Msg("failed to accept new connection")
 		}
 		go handle(c, conn, queue)
 	}
@@ -256,37 +247,34 @@ func (c *nicheClient) listen(socketPath string, queue chan string) error {
 
 func handle(c *nicheClient, conn net.Conn, queue chan string) {
 	defer func() {
-		fmt.Println("Closing connection...")
+		log.Info().Str("remoteAddr", conn.RemoteAddr().String()).Msg("closing connection")
 		conn.Close()
 	}()
 
-	//timeoutDuration := 1000 * time.Second // TODO?
 	bufReader := bufio.NewReader(conn)
-
 	for {
-		//conn.SetReadDeadline(time.Now().Add(timeoutDuration))
 		byts, err := bufReader.ReadBytes('\n')
 		if err != nil {
-			log.Println("uhhh BAD", err)
+			log.Warn().Err(err).Msg("?????")
 			break
 		}
 		storePath := strings.TrimSpace(string(byts))
-		log.Println("received", storePath)
+		log.Trace().Str("storePath", storePath).Msg("received storePath")
 
 		if storePath == "QUIT" {
-			log.Println("told to quit")
+			log.Trace().Msg("told to quit")
 			queue <- storePath
 			break
 		}
 
 		allStorePaths, err := getAllStorePaths(storePath)
 		if err != nil {
-			log.Println("uhhh BAD", err)
+			log.Warn().Err(err).Msg("?????")
 			break
 		}
 
 		for _, storePath := range allStorePaths {
-			log.Println("propagating", storePath)
+			log.Info().Str("storePath", storePath).Msg("sending storePath to the queue")
 			queue <- storePath
 		}
 	}
@@ -300,17 +288,18 @@ func (c *nicheClient) processBuildQueue(queue chan string, wg *sync.WaitGroup, a
 
 	for storePath := range queue {
 		if storePath == "QUIT" {
-			log.Println("leaving build queue")
+			log.Info().Msg("leaving build queue")
 			return
 		}
 		for _, seenPath := range seenPaths {
 			if strings.EqualFold(storePath, seenPath) {
+				log.Trace().Str("storePath", storePath).Msg("skipping already processed path")
 				continue
 			}
 		}
 		c.ensurePath(storePath, alwaysOverwrite)
 		seenPaths = append(seenPaths, storePath)
-		log.Println("ensured", storePath)
+		log.Info().Str("storePath", storePath).Msg("ensured storePath")
 	}
 }
 

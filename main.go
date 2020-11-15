@@ -4,13 +4,16 @@ import (
 	"bufio"
 	"encoding/json"
 	"io/ioutil"
-	"log"
+
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/spf13/cobra"
 
@@ -27,6 +30,14 @@ func preprocessHostArg(host string) (*url.URL, error) {
 		host = "https://" + host
 	}
 	return url.Parse(host)
+}
+
+func init() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	if os.Getenv("NICHE_DEBUG") != "" {
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	}
 }
 
 func main() {
@@ -73,10 +84,11 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cacheName := args[1]
 			if argInit.kind == "" || argInit.container == "" || argInit.gpgFingerprint == "" {
-				log.Fatalln("kind, fingerprint, and container must all be specified")
+				log.Fatal().Msg("kind, fingerprint, and container must all be specified")
 			}
 			privateKeyStr, publicKeyStr, err := nixStoreGenerateBinaryCacheKey(cacheName)
 			if err != nil {
+				log.Fatal().Err(err).Msg("failed generating the binary cache key")
 				return err
 			}
 			configMap, err := getInitialStorageConfigMap(argInit.kind)
@@ -127,7 +139,6 @@ func main() {
 		Use: "reconfigure",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cacheURLStr := args[0]
-			//cacheURL, err := preprocessHost(argReconfigure.cache)
 			cacheURL, err := preprocessHostArg(cacheURLStr)
 			if err != nil {
 				return err
@@ -171,9 +182,6 @@ func main() {
 	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.configFilePath, "config", "c", "", "path to config file to init/force overwrite")
 	rootCmd.AddCommand(cmdReconfigure)
 
-	// var argBuild struct {
-	// 	cache string
-	// }
 	var cmdBuild = &cobra.Command{
 		Use:   "build",
 		Short: "builds an INSTALLABLE and uploads each output as they're built",
@@ -186,25 +194,20 @@ func main() {
 			}
 
 			cacheURL, err := preprocessHostArg(cacheURLStr)
-			//cacheURL, err := preprocessHost(argBuild.cache)
 			if err != nil {
 				return err
 			}
 
-			//socketPath := argBuild.socketPath
-			socketPath := ""
-			if socketPath == "" {
-				dir, err := ioutil.TempDir("", "niche")
-				if err != nil {
-					return err
-				}
-				defer os.RemoveAll(dir)
-				socketPath = filepath.Join(dir, "queue.sock")
+			dir, err := ioutil.TempDir("", "niche")
+			if err != nil {
+				return err
 			}
+			defer os.RemoveAll(dir)
+			socketPath := filepath.Join(dir, "queue.sock")
 
 			c, err := clientFromSops(*cacheURL)
 			if err != nil {
-				return nil
+				return err
 			}
 			defer c.stowClient.Close()
 
@@ -224,7 +227,7 @@ func main() {
 
 			wg.Wait()
 
-			log.Println("all done")
+			log.Info().Msg("done")
 			return nil
 		},
 	}
@@ -258,15 +261,13 @@ func main() {
 			for {
 				byts, err := bufReader.ReadBytes('\n')
 				if err != nil {
-					log.Println("uhhh BAD", err)
+					log.Warn().Err(err).Msg("uhhh BAD")
 					break
 				}
 
 				storePath := strings.TrimSpace(string(byts))
-				log.Println("received", storePath)
-
 				if err = c.ensurePath(storePath, alwaysOverwrite); err != nil {
-					log.Fatalln("failed to push", storePath)
+					log.Warn().Err(err).Msgf("failed to upload %s", storePath)
 				}
 			}
 

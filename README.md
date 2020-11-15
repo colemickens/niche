@@ -46,6 +46,9 @@ niche build 'https://azdev2020nov.blob.core.windows.net/cache' -- \
 # or, just upload a bunch of paths, right now (TODO: DOESNT WORK YET)
 storePath="/nix/store/p9vy4sgsh6m2kgph9i2mv3qgr3iy1afc-firefox-82.0.2"
 echo $storePath | niche upload "azdev2020nov.blob.core.windows.net/cache"
+
+# run `niche` with the most verbose output log level
+NICHE_DEBUG=any_non_empty_valu niche build ...
 ```
 
 You may need to create a config file by hand:
@@ -56,6 +59,7 @@ You may need to create a config file by hand:
 
 If you're interested in contributing to `niche`, here are some suggestions:
 
+0. SOme of the log handling is dumb, I recreated the same builder start over and over.
 0. Improve error handling. Not sure what state of the art is in Golang today.
 0. Add a `niche init` option that walks the user through initial config file creation
 1. Reduce the places where we need to call out to `nix` (all usages are in `nix.go`)
@@ -91,8 +95,6 @@ This would nicely increase the ability to make tooling around Stow itself.
 
 ## todo (pre-release)
 
-- figure out why xz stream is failing at times
-- better logging, remove fmt.Println()
 - lots of automated tests
 - it might help if we could get post-build-hook for all things, evne if not actually built locally
 - simpler "echo /nix/store/x | niche push foo.bar.com" invocation like cachix

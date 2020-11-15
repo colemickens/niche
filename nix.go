@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"github.com/rs/zerolog/log"
 	"github.com/ulikunitz/xz"
 )
 
@@ -73,30 +74,43 @@ func nixDumpPath(storePath string) (string, error) {
 
 	xzWriter, err := xz.NewWriter(tempFile)
 	if err != nil {
-		log.Fatalf("xz.NewWriter error %s", err)
+		log.Fatal().Err(err).Msg("xz.NewWriter error")
 		return "", err
 	}
 
 	dumpCmd := exec.Command("nix", "dump-path", storePath)
+
 	dumpCmdStdout, err := dumpCmd.StdoutPipe()
 	if err != nil {
-		log.Fatalf("dumpCmd.StdoutPipe error %s", err)
+		log.Fatal().Err(err).Msg("dumpCmd StdoutPipe error")
 		return "", err
 	}
+
+	err = dumpCmd.Start()
+	if err != nil {
+		log.Fatal().Err(err).Msg("dumpCmd Start error")
+		return "", err
+	}
+
+	var outwg sync.WaitGroup
+	outwg.Add(1)
 	go func() {
 		n, err := io.Copy(xzWriter, dumpCmdStdout)
 		if err != nil {
-			log.Fatalln("error copying the xz stream to file")
+			log.Fatal().Err(err).Msg("error copying the xz stream to file")
 		}
-		log.Println("copied bytes to file from xz stream:", n)
+		log.Info().Int64("bytesCopied", n).Msg("copied bytes to file from xz stream")
+		xzWriter.Close()
+		tempFile.Close()
+		outwg.Done()
 	}()
-	dumpCmd.Start()
-	if err := dumpCmd.Wait(); err != nil {
-		log.Fatal(err)
-		return "", err
-	}
-	tempFile.Close()
+	outwg.Wait()
 
+	if err := dumpCmd.Wait(); err != nil {
+		log.Fatal().Err(err).Msg("dumpCmd: failed to wait")
+	}
+
+	log.Info().Str("storePath", storePath).Msg("done waiting for process/copy")
 	return tempFilePath, nil
 }
 
@@ -155,7 +169,7 @@ func nixBuild(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 
 	_, err = cmd.Output()
 	if eerr, ok := err.(*exec.ExitError); ok {
-		log.Println(string(eerr.Stderr))
+		log.Info().Msg(string(eerr.Stderr))
 		panic(eerr)
 	}
 
@@ -168,12 +182,12 @@ func nixBuild(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("sent final build:", outLink)
+	log.Info().Str("outLink", outLink).Msg("sent final out link")
 	_, err = c.Write([]byte("QUIT\n"))
 	if err != nil {
 		return err
 	}
-	log.Println("sent QUIT")
+	log.Info().Msg("sent QUIT")
 	return nil
 }
 
