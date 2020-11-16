@@ -36,7 +36,20 @@
             "env": {},
             "args": [
                 "reconfigure", "zdev2020nov.blob.core.windows.net/cache",
-                "-c", "./tests/azure.secret.json"
+                "-f", "./tests/azure.secret.json"
+            ]
+        },
+        {
+            "name": "Launch-Reconfigure",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {},
+            "args": [
+                "init", "azdev2020nov.blob.core.windows.net/cache",
+                "-k", "azure",
+                "-c", ""
             ]
         }
     ]

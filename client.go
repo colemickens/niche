@@ -75,18 +75,29 @@ func clientFromBytes(byts []byte) (*nicheClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clientFromPrivateNicheConfig(cfg)
+	return clientFromPrivateNicheConfig(cfg, false)
 }
 
-func clientFromPrivateNicheConfig(cfg privateNicheConfig) (*nicheClient, error) {
+func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheClient, error) {
 	loc, err := stow.Dial(cfg.StorageKind, stow.ConfigMap(cfg.StorageConfigMap))
 	if err != nil {
 		return nil, err
 	}
 
-	cntr, err := loc.Container(cfg.StorageContainer)
-	if err != nil {
-		return nil, err
+	var cntr stow.Container
+	if create {
+		if _, err := loc.Container(cfg.StorageContainer); err != nil {
+			return nil, fmt.Errorf("container '%s' already exists", cfg.StorageContainer)
+		}
+		cntr, err = loc.CreateContainer(cfg.StorageContainer)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cntr, err = loc.Container(cfg.StorageContainer)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	newClient := &nicheClient{

@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"io/ioutil"
+	"regexp"
 
 	"net"
 	"net/url"
@@ -24,6 +24,9 @@ import (
 	_ "github.com/graymeta/stow/s3"
 	_ "github.com/graymeta/stow/swift"
 )
+
+var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
 
 func preprocessHostArg(host string) (*url.URL, error) {
 	if !strings.HasPrefix(host, "https://") || !strings.HasPrefix(host, "http://") {
@@ -48,7 +51,7 @@ func main() {
 	}
 	var cmdQueue = &cobra.Command{
 		Use:    "queue",
-		Hidden: true, // this, for now, is only used internally as the post-build-hook from `niche build` -> `nix build`
+		Hidden: true, // only used internally, in all usages
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outPathsStr := os.Getenv("OUT_PATHS")
 			outPaths := strings.Split(outPathsStr, " ")
@@ -64,6 +67,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				log.Trace().Str("storePath", p).Msg("sent path to socket")
 			}
 
 			return nil
@@ -72,115 +76,126 @@ func main() {
 	cmdQueue.PersistentFlags().StringVarP(&argQueue.socketPath, "socket", "s", "", "path of the socket to write paths to")
 	rootCmd.AddCommand(cmdQueue)
 
-	var argInit struct {
-		kind           string
-		container      string
-		gpgFingerprint string
+	cmdConfig := &cobra.Command{
+		Use:   "config",
+		Short: "commands to download/upload/initialize a config file",
 	}
-	var cmdInit = &cobra.Command{
-		Use:    "init",
+
+	var argConfigInit struct {
+		kind         string
+		container    string
+		fingerprints []string
+	}
+	var cmdConfigInit = &cobra.Command{
+		Use:    "config init",
 		Hidden: true,
 		Args:   cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cacheName := args[1]
-			if argInit.kind == "" || argInit.container == "" || argInit.gpgFingerprint == "" {
+			if argConfigInit.kind == "" || argConfigInit.container == "" || len(argConfigInit.fingerprints) == 0 {
 				log.Fatal().Msg("kind, fingerprint, and container must all be specified")
 			}
-			privateKeyStr, publicKeyStr, err := nixStoreGenerateBinaryCacheKey(cacheName)
-			if err != nil {
-				log.Fatal().Err(err).Msg("failed generating the binary cache key")
+
+			// use existing signing key, or make a new one
+			var privateKeyStr string
+			var publicKeyStr string
+			var err error
+			if privateKeyStr, found := os.LookupEnv("NICHE_SIGNING_KEY"); found {
+				log.Trace().Msgf("Using signingkey from NICHE_SIGNING_KEY env var")
+				pubFromPrivateKeyStr := func(s string) (string, error) {
+					return "", nil
+				}
+				publicKeyStr, err = pubFromPrivateKeyStr(privateKeyStr)
+				if err != nil {
+					return err
+				}
+			}
+			if privateKeyStr, publicKeyStr, err = nixStoreGenerateBinaryCacheKey(cacheName); err != nil {
 				return err
 			}
-			configMap, err := getInitialStorageConfigMap(argInit.kind)
-			if err != nil {
-				return err
-			}
+
+			// create stow's config map from expected env vars
+			configMap := getInitialStorageConfigMap(argConfigInit.kind)
 
 			newConfig := privateNicheConfig{
-				StorageKind:      argInit.kind,
+				StorageKind:      argConfigInit.kind,
 				SigningKey:       privateKeyStr,
 				PublicKey:        publicKeyStr,
-				StorageContainer: argInit.container,
+				StorageContainer: argConfigInit.container,
 				StorageConfigMap: configMap,
-				KeyGroups:        []nicheKeyGroup{{"pgp": []string{argInit.gpgFingerprint}}},
+				KeyGroups:        []nicheKeyGroup{{"pgp": argConfigInit.fingerprints}},
 			}
 
-			data, err := json.MarshalIndent(newConfig, "", "  ")
+			c, err := clientFromPrivateNicheConfig(newConfig, true)
 			if err != nil {
 				return err
 			}
 
-			// TODO: do the reconfigure dance now where we let them edit the file
-			// maybe keep them in a loop??? IDK
-
-			//
-			//
-			//
-			//
-			//
-			//
-			//
-			//
-
-			ioutil.WriteFile("/tmp/foo", data, 0644)
-
-			return nil
-		},
-	}
-	cmdInit.PersistentFlags().StringVarP(&argInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
-	cmdInit.PersistentFlags().StringVarP(&argInit.kind, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
-	cmdInit.PersistentFlags().StringVarP(&argInit.gpgFingerprint, "fingerprint", "f", "", "the gpg fingerprint(s) to use for encrypting/decrypting the config (comma separated)")
-	rootCmd.AddCommand(cmdInit)
-
-	var argReconfigure struct {
-		configFilePath string
-	}
-	var cmdReconfigure = &cobra.Command{
-		Use: "reconfigure",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheURLStr := args[0]
-			cacheURL, err := preprocessHostArg(cacheURLStr)
-			if err != nil {
-				return err
-			}
-
-			var c *nicheClient
-			if argReconfigure.configFilePath != "" {
-				c, err = clientFromFile(argReconfigure.configFilePath)
-				if err != nil {
-					return err
-				}
-			} else {
-				c, err = clientFromSops(*cacheURL)
-				if err != nil {
-					return err
-				}
-				oldBytes, err := json.Marshal(c.config)
-				if err != nil {
-					return err
-				}
-				newConfigBytes, err := CaptureInputFromEditor(oldBytes)
-				if err != nil {
-					return err
-				}
-				c, err = clientFromBytes(newConfigBytes)
-				if err != nil {
-					return err
-				}
-			}
-			defer c.stowClient.Close()
-
-			// TODO: sanity check, warn if keys change?
 			err = c.reuploadConfig()
 			if err != nil {
 				return err
 			}
 
+			//u := "generate this URL basic on a template"
+			log.Info().Msg("successfully created repo")
+			log.Info().Msg("I think you need to determine your own url here...")
+			log.Info().Msg("stow doesn't seem to give me a url to container and it looks like Item.URL() is useless")
+
 			return nil
 		},
 	}
-	cmdReconfigure.PersistentFlags().StringVarP(&argReconfigure.configFilePath, "config", "c", "", "path to config file to init/force overwrite")
-	rootCmd.AddCommand(cmdReconfigure)
+	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
+	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.kind, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
+	cmdConfigInit.PersistentFlags().StringSliceVarP(&argConfigInit.fingerprints, "fingerprint", "f", []string{}, "the gpg fingerprint(s) to use for encrypting/decrypting the config (list multiple times, and/or comma separated)")
+	cmdConfig.AddCommand(cmdConfigInit)
+
+	var argConfigUpload struct {
+		configFilePath string
+	}
+	var cmdConfigUpload = &cobra.Command{
+		Use: "config upload",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := clientFromFile(argConfigUpload.configFilePath)
+			if err != nil {
+				return err
+			}
+			defer c.stowClient.Close()
+
+			// TODO: generate public config json? uploadConfigs() does both?
+
+			err = c.reuploadConfig() // TODO: rename func?
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+	cmdConfigUpload.PersistentFlags().StringVarP(&argConfigUpload.configFilePath, "config", "f", "", "path to config file to init/force overwrite")
+	cmdConfig.AddCommand(cmdConfigUpload)
+
+	var cmdConfigDownload = &cobra.Command{
+		Use: "config download",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := clientFromFile(argConfigDownload.configFilePath)
+			if err != nil {
+				return err
+			}
+			defer c.stowClient.Close()
+
+			// TODO: generate public config json? DownloadConfigs() does both?
+
+			err = c.reDownloadConfig() // TODO: rename func?
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+	cmdConfig.AddCommand(cmdConfigDownload)
+
+	rootCmd.AddCommand(cmdConfig)
 
 	var cmdBuild = &cobra.Command{
 		Use:   "build",
@@ -231,7 +246,6 @@ func main() {
 			return nil
 		},
 	}
-	//cmdBuild.PersistentFlags().StringVarP(&argBuild.cache, "cache-url", "u", "", "cache url")
 	rootCmd.AddCommand(cmdBuild)
 
 	var cmdUpload = &cobra.Command{

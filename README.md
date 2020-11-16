@@ -36,8 +36,17 @@ If [`stow`](https://github.com/graymeta/stow) supports it, so do we (in theory).
 # initialize a configuration file (creates a signing key for you)
 niche init -k 'azure' -f '4774EB1BF21D57E93221CF0262556A61E301DC21' -c ./config.json
 
-# initialize the cache by uploading our (encrypted) config
-niche reconfigure -u 'https://azdev2020nov.blob.core.windows.net/cache' -c ./config.json
+# initialize a new config file, including a new signing key if none is specified,
+# creates the storage container and uploads the file
+niche config init 'azdev2020nov.blob.core.windows.net/cache' -c ./config.json
+
+# upload a config file directly to its storage
+niche config upload -f ./config.json
+
+# (PUBLIC) show info about a niche repo
+niche show 'azdev2020nov.blob.core.windows.net/cache'
+# extra-nix-options=""
+# publicCacheKey=""
 
 # invoke `nix build` and upload all build results as they're built
 niche build 'https://azdev2020nov.blob.core.windows.net/cache' -- \
