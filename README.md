@@ -5,6 +5,8 @@
 `niche` uploads store paths to your binary cache mirror running in any cloud blob storage. It can also wrap `nix build`
 to upload build artifacts *as they're produced* rather than waiting for a successful build.
 
+(**Warning**: `niche` does no locking currently. I'm not sure what happens if clients concurrently upload a path.)
+
 ## demo
 (or maybe a GIF with a note that it links to a scrollable asciinema)
 [link to screenshot of asciinema]

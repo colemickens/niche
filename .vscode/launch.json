@@ -5,11 +5,54 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch test package",
+            "name": "Run Tests",
             "type": "go",
             "request": "launch",
             "mode": "test",
             "program": "${workspaceFolder}"
+        },
+        {
+            "name": "Launch-Config-Init",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "NICHE_DEBUG": true,
+                "AZURE_ACCOUNT": "azdev2020nov",
+                "AZURE_KEY": "fhY96ytomI9bsZ3PpQxkzmsHjFiS9UDNXTPtbaczTouqt/LnJrbtgkVMX0tzufXE2Dst1VwCyKSccxd0Iap0uw=="
+            },
+            "args": [
+                "config", "init", "-k", "azure", "-c", "newcache2",
+                "--fingerprints", "8A94ED58A476A13AE0D6E85E9758078DE5308308,4774EB1BF21D57E93221CF0262556A61E301DC21,EAE0488FD59B66251E9004D1D7FA118E53E6D398",
+                "az.cache.r10e.tech"
+            ]
+        },
+        {
+            "name": "Launch-Config-Download",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "NICHE_DEBUG": true
+            },
+            "args": [
+                "config", "download", "-f", "/tmp/something", "azdev2020nov.blob.core.windows.net/newcache2"
+            ]
+        },
+        {
+            "name": "Launch-Config-Upload",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "NICHE_DEBUG": true
+            },
+            "args": [
+                "config", "upload", "-f", "/tmp/something"
+            ]
         },
         {
             "name": "Launch-Build",
@@ -23,33 +66,7 @@
             },
             "args": [
                 "build", "azdev2020nov.blob.core.windows.net/cache", "--",
-                //"/home/cole/code/flake-impure", "--impure"
                 "/home/cole/code/nixpkgs-wayland#defaultPackage.x86_64-linux"
-            ]
-        },
-        {
-            "name": "Launch-Reconfigure",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}",
-            "env": {},
-            "args": [
-                "reconfigure", "zdev2020nov.blob.core.windows.net/cache",
-                "-f", "./tests/azure.secret.json"
-            ]
-        },
-        {
-            "name": "Launch-Reconfigure",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}",
-            "env": {},
-            "args": [
-                "init", "azdev2020nov.blob.core.windows.net/cache",
-                "-k", "azure",
-                "-c", ""
             ]
         }
     ]

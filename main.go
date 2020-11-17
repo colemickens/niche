@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"io/ioutil"
 	"regexp"
 
@@ -87,11 +87,11 @@ func main() {
 		fingerprints []string
 	}
 	var cmdConfigInit = &cobra.Command{
-		Use:    "config init",
+		Use:    "init",
 		Hidden: true,
-		Args:   cobra.MaximumNArgs(1),
+		Args:   cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheName := args[1]
+			cacheName := args[0]
 			if argConfigInit.kind == "" || argConfigInit.container == "" || len(argConfigInit.fingerprints) == 0 {
 				log.Fatal().Msg("kind, fingerprint, and container must all be specified")
 			}
@@ -101,7 +101,6 @@ func main() {
 			var publicKeyStr string
 			var err error
 			if privateKeyStr, found := os.LookupEnv("NICHE_SIGNING_KEY"); found {
-				log.Trace().Msgf("Using signingkey from NICHE_SIGNING_KEY env var")
 				pubFromPrivateKeyStr := func(s string) (string, error) {
 					return "", nil
 				}
@@ -109,9 +108,13 @@ func main() {
 				if err != nil {
 					return err
 				}
-			}
-			if privateKeyStr, publicKeyStr, err = nixStoreGenerateBinaryCacheKey(cacheName); err != nil {
-				return err
+				log.Info().Str("publicKey", publicKeyStr).Msgf("Using signingkey from ${NICHE_SIGNING_KEY}")
+			} else {
+				log.Info().Msgf("Generating new signing key")
+				if privateKeyStr, publicKeyStr, err = nixStoreGenerateBinaryCacheKey(cacheName); err != nil {
+					return err
+				}
+				log.Info().Str("publicKey", publicKeyStr).Msgf("Generated new signing key")
 			}
 
 			// create stow's config map from expected env vars
@@ -136,24 +139,59 @@ func main() {
 				return err
 			}
 
-			//u := "generate this URL basic on a template"
-			log.Info().Msg("successfully created repo")
-			log.Info().Msg("I think you need to determine your own url here...")
-			log.Info().Msg("stow doesn't seem to give me a url to container and it looks like Item.URL() is useless")
+			log.Info().Msg("successfully created new niche repo")
+			// TODO: get Stow to have a NiceURL() that we can use here?
 
 			return nil
 		},
 	}
 	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
-	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.kind, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
-	cmdConfigInit.PersistentFlags().StringSliceVarP(&argConfigInit.fingerprints, "fingerprint", "f", []string{}, "the gpg fingerprint(s) to use for encrypting/decrypting the config (list multiple times, and/or comma separated)")
+	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.container, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
+	cmdConfigInit.PersistentFlags().StringSliceVarP(&argConfigInit.fingerprints, "fingerprints", "p", []string{}, "the gpg fingerprint(s) to use for encrypting/decrypting the config (list multiple times, and/or comma separated)")
 	cmdConfig.AddCommand(cmdConfigInit)
+
+	var argConfigDownload struct {
+		configFilePath string
+	}
+	var cmdConfigDownload = &cobra.Command{
+		Use:  "download",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cacheURLStr := args[0]
+			cacheURL, err := preprocessHostArg(cacheURLStr)
+			if err != nil {
+				return err
+			}
+
+			if argConfigDownload.configFilePath == "" {
+				log.Fatal().Msg("'config' argument is required")
+			}
+
+			c, err := clientFromSops(*cacheURL)
+			if err != nil {
+				return err
+			}
+			defer c.stowClient.Close()
+
+			data, err := json.MarshalIndent(c.config, "", "  ")
+			if err != nil {
+				return err
+			}
+			ioutil.WriteFile(argConfigDownload.configFilePath, data, 0600)
+
+			log.Info().Str("configFile", argConfigDownload.configFilePath).Msg("config download complete")
+
+			return nil
+		},
+	}
+	cmdConfigDownload.PersistentFlags().StringVarP(&argConfigDownload.configFilePath, "config", "f", "", "where to save the downloaded and decrypted config")
+	cmdConfig.AddCommand(cmdConfigDownload)
 
 	var argConfigUpload struct {
 		configFilePath string
 	}
 	var cmdConfigUpload = &cobra.Command{
-		Use: "config upload",
+		Use: "upload",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := clientFromFile(argConfigUpload.configFilePath)
 			if err != nil {
@@ -161,39 +199,20 @@ func main() {
 			}
 			defer c.stowClient.Close()
 
-			// TODO: generate public config json? uploadConfigs() does both?
+			// TODO: (inside reupload config) generate public config json? uploadConfigs() does both?
 
 			err = c.reuploadConfig() // TODO: rename func?
 			if err != nil {
 				return err
 			}
 
+			log.Info().Str("configFile", argConfigUpload.configFilePath).Msg("config upload complete")
+
 			return nil
 		},
 	}
 	cmdConfigUpload.PersistentFlags().StringVarP(&argConfigUpload.configFilePath, "config", "f", "", "path to config file to init/force overwrite")
 	cmdConfig.AddCommand(cmdConfigUpload)
-
-	var cmdConfigDownload = &cobra.Command{
-		Use: "config download",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := clientFromFile(argConfigDownload.configFilePath)
-			if err != nil {
-				return err
-			}
-			defer c.stowClient.Close()
-
-			// TODO: generate public config json? DownloadConfigs() does both?
-
-			err = c.reDownloadConfig() // TODO: rename func?
-			if err != nil {
-				return err
-			}
-
-			return nil
-		},
-	}
-	cmdConfig.AddCommand(cmdConfigDownload)
 
 	rootCmd.AddCommand(cmdConfig)
 
@@ -247,48 +266,6 @@ func main() {
 		},
 	}
 	rootCmd.AddCommand(cmdBuild)
-
-	var cmdUpload = &cobra.Command{
-		Use:   "upload",
-		Short: "uploads paths piped into standard in",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cobraCmd *cobra.Command, args []string) error {
-			cacheURLStr := args[0]
-
-			cacheURL, err := preprocessHostArg(cacheURLStr)
-			//cacheURL, err := preprocessHost(argBuild.cache)
-			if err != nil {
-				return err
-			}
-
-			c, err := clientFromSops(*cacheURL)
-			if err != nil {
-				return nil
-			}
-			defer c.stowClient.Close()
-
-			_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
-
-			//timeoutDuration := 1000 * time.Second // TODO?
-			bufReader := bufio.NewReader(os.Stdin)
-
-			for {
-				byts, err := bufReader.ReadBytes('\n')
-				if err != nil {
-					log.Warn().Err(err).Msg("uhhh BAD")
-					break
-				}
-
-				storePath := strings.TrimSpace(string(byts))
-				if err = c.ensurePath(storePath, alwaysOverwrite); err != nil {
-					log.Warn().Err(err).Msgf("failed to upload %s", storePath)
-				}
-			}
-
-			return nil
-		},
-	}
-	rootCmd.AddCommand(cmdUpload)
 
 	rootCmd.Execute()
 }

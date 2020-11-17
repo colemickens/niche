@@ -86,14 +86,16 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheCl
 
 	var cntr stow.Container
 	if create {
-		if _, err := loc.Container(cfg.StorageContainer); err != nil {
+		if _, err := loc.Container(cfg.StorageContainer); err == nil {
 			return nil, fmt.Errorf("container '%s' already exists", cfg.StorageContainer)
 		}
+		log.Info().Str("container", cfg.StorageContainer).Msgf("Creating storage container")
 		cntr, err = loc.CreateContainer(cfg.StorageContainer)
 		if err != nil {
 			return nil, err
 		}
 	} else {
+		log.Trace().Str("container", cfg.StorageContainer).Msgf("Looking up storage container")
 		cntr, err = loc.Container(cfg.StorageContainer)
 		if err != nil {
 			return nil, err
