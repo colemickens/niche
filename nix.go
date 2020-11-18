@@ -1,9 +1,6 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,25 +17,37 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-type nixPathInfoOutput struct {
-	Path       string `json:"path"`
-	NarHash    string
-	NarSize    int64
-	References []string
-	Deriver    string
-	Signatures []string
+type nixClient interface {
+	PathInfo(storePath, narItemPath string) (narInfo *narInfo, err error)
+	HashFile(storePath string)
+	DumpPath(storePath string)
+	ToBase32(storePath string) (hash string, err error)
+	QueryPaths(storePath string) (dependencies []string, err error)
+	Build(thing string)
 }
+
+type nixCliClient struct{}
 
 // this is actually narInfo for storePath, and specific nar.......
 // we might just take filepath to nar instead of hash+Size
-func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (nar *narInfo, err error) {
+func (_ nixCliClient) PathInfo(storePath, narItemPath string) (nar *narInfo, err error) {
+	fileHash := "TODO"
+	fileSize := int64(0)
+
 	pathInfoCmd := exec.Command("nix", "path-info", "--json", storePath)
 	pathInfoBytes, err := pathInfoCmd.Output()
 	if err != nil {
 		return nil, err
 	}
 
-	var info []nixPathInfoOutput
+	var info []struct {
+		Path       string `json:"path"`
+		NarHash    string
+		NarSize    int64
+		References []string
+		Deriver    string
+		Signatures []string
+	}
 	s := string(pathInfoBytes)
 	_ = s
 	err = json.Unmarshal(pathInfoBytes, &info)
@@ -60,14 +69,14 @@ func narInfoForPath(storePath, narItemPath, fileHash string, fileSize int64) (na
 	}, nil
 }
 
-func nixHashFile(storePath string) (hash string, err error) {
+func (_ nixCliClient) HashFile(storePath string) (hash string, err error) {
 	hashCmd := exec.Command("nix", "hash-file", storePath)
 	hashBytes, err := hashCmd.Output()
 	fileHash := strings.TrimSpace(string(hashBytes))
 	return fileHash, nil
 }
 
-func nixDumpPath(storePath string) (string, error) {
+func (_ nixCliClient) DumpPath(storePath string) (string, error) {
 	// compress + upload the NAR
 	tempFilePath := filepath.Join(os.TempDir(), "nix-dump-path.tmp") // TODO: add random
 	tempFile, err := os.Create(tempFilePath)
@@ -117,7 +126,7 @@ func nixDumpPath(storePath string) (string, error) {
 	return tempFilePath, nil
 }
 
-func nixToBase32(hash string) (string, error) {
+func (_ nixCliClient) ToBase32(hash string) (string, error) {
 	cmd := exec.Command("nix", "to-base32", hash)
 	hashStrBytes, err := cmd.Output()
 	if err != nil {
@@ -126,7 +135,7 @@ func nixToBase32(hash string) (string, error) {
 	return strings.TrimSpace(string(hashStrBytes)), nil
 }
 
-func getAllStorePaths(storePath string) ([]string, error) {
+func (_ nixCliClient) QueryStorePaths(storePath string) ([]string, error) {
 	// nix-store -q -R $storePath
 	cmd := exec.Command("nix-store", "-q", "-R", storePath)
 	outputBytes, err := cmd.Output()
@@ -142,7 +151,7 @@ func getAllStorePaths(storePath string) ([]string, error) {
 	return outputStrings, nil
 }
 
-func nixBuild(cacheURL url.URL, socketPath string, buildArgs ...string) error {
+func (_ nixCliClient) Build(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -192,19 +201,4 @@ func nixBuild(cacheURL url.URL, socketPath string, buildArgs ...string) error {
 	}
 	log.Info().Msg("sent QUIT")
 	return nil
-}
-
-func nixStoreGenerateBinaryCacheKey(cacheName string) (string, string, error) {
-	pubKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-
-	privateKeyStr := base64.StdEncoding.EncodeToString(privateKey)
-	publicKeyStr := base64.StdEncoding.EncodeToString(pubKey)
-
-	finalPrivateKeyStr := cacheName + ":" + privateKeyStr
-	finalPublicKeyStr := cacheName + ":" + publicKeyStr
-
-	return finalPrivateKeyStr, finalPublicKeyStr, nil
 }

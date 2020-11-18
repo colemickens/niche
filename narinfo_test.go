@@ -9,6 +9,17 @@ const testPath string = "/nix/store/p9vy4sgsh6m2kgph9i2mv3qgr3iy1afc-firefox-82.
 const testPathSig string = "cache.niche.li:I1ouPYKNyE88Ox0BpelSBdjc/iTi5qKpRFwGQsH4GRL3Q2AMcI+pFkKCskqtNX/Q+UMc+KcVizDigzDYO+86CQ=="
 const testPrivateKey string = "cache.niche.li:bMMTjTggxXxCIDZu6zDQq5H67iklXDppZsvSzwq5EyKpW7an8Ohms/zGu2eufEQW8h/eEErCjj5X9+EqQjtQmA=="
 
+type NixMockClient struct{}
+
+func (_ NixMockClient) PathInfo() {}
+func (_ NixMockClient) HashFile() {}
+func (_ NixMockClient) DumpPath() {
+	// pass the known (test) paths over the socket to emulate the build?
+}
+func (_ NixMockClient) ToBase32()   {}
+func (_ NixMockClient) QueryPaths() {}
+func (_ NixMockClient) Build()      {}
+
 func getUnsignedValidNarInfo() narInfo {
 	/*
 		StorePath: /nix/store/p9vy4sgsh6m2kgph9i2mv3qgr3iy1afc-firefox-82.0.2

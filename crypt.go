@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"io/ioutil"
 	"os"
 
@@ -52,4 +55,19 @@ func keyGroupsFromKeyGroups(keyGroupsBlob []nicheKeyGroup) ([]sops.KeyGroup, err
 	}
 
 	return config.KeyGroups, nil
+}
+
+func generateBinaryCacheKeys(cacheName string) (string, string, error) {
+	pubKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", err
+	}
+
+	privateKeyStr := base64.StdEncoding.EncodeToString(privateKey)
+	publicKeyStr := base64.StdEncoding.EncodeToString(pubKey)
+
+	finalPrivateKeyStr := cacheName + ":" + privateKeyStr
+	finalPublicKeyStr := cacheName + ":" + publicKeyStr
+
+	return finalPrivateKeyStr, finalPublicKeyStr, nil
 }

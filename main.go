@@ -111,7 +111,7 @@ func main() {
 				log.Info().Str("publicKey", publicKeyStr).Msgf("Using signingkey from ${NICHE_SIGNING_KEY}")
 			} else {
 				log.Info().Msgf("Generating new signing key")
-				if privateKeyStr, publicKeyStr, err = nixStoreGenerateBinaryCacheKey(cacheName); err != nil {
+				if privateKeyStr, publicKeyStr, err = generateBinaryCacheKeys(cacheName); err != nil {
 					return err
 				}
 				log.Info().Str("publicKey", publicKeyStr).Msgf("Generated new signing key")
