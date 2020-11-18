@@ -20,7 +20,6 @@
             "env": {
                 "NICHE_DEBUG": true,
                 "AZURE_ACCOUNT": "azdev2020nov",
-                "AZURE_KEY": "fhY96ytomI9bsZ3PpQxkzmsHjFiS9UDNXTPtbaczTouqt/LnJrbtgkVMX0tzufXE2Dst1VwCyKSccxd0Iap0uw=="
             },
             "args": [
                 "config", "init", "-k", "azure", "-c", "newcache2",
