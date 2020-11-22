@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"path"
 
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,7 +32,7 @@ import (
 var nix nixclient.NixClient = nixclient.NixClientCli{}
 
 func preprocessHostArg(host string) (*url.URL, error) {
-	if !strings.HasPrefix(host, "https://") || !strings.HasPrefix(host, "http://") {
+	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
 		host = "https://" + host
 	}
 	return url.Parse(host)
@@ -226,6 +229,40 @@ func getCmdConfigUpload() *cobra.Command {
 }
 
 //
+// NICHE SHOW
+func getCmdShow() *cobra.Command {
+	cmdShow := &cobra.Command{
+		Use: "show",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cacheURLStr := args[0]
+			cacheURL, err := preprocessHostArg(cacheURLStr)
+			if err != nil {
+				return err
+			}
+
+			u := cacheURL
+			u.Path = path.Join(u.Path, wkPublicConfig)
+
+			resp, err := http.Get(u.String())
+			if err != nil {
+				return err
+			}
+			var pc publicNicheConfig
+			dec := json.NewDecoder(resp.Body)
+			defer resp.Body.Close()
+			err = dec.Decode(&pc)
+			if err != nil {
+				return err
+			}
+			publicKey := string(pc.PublicKey)
+			fmt.Println(publicKey)
+			return nil
+		},
+	}
+	return cmdShow
+}
+
+//
 // NICHE BUILD
 func getCmdBuild() *cobra.Command {
 	cmdBuild := &cobra.Command{
@@ -299,7 +336,7 @@ func main() {
 	cmdConfig.AddCommand(getCmdConfigUpload())
 	rootCmd.AddCommand(cmdConfig)
 
-	// TODO: rootCmd.AddCommand(cmdShow)
+	rootCmd.AddCommand(getCmdShow())
 
 	rootCmd.AddCommand(getCmdBuild())
 
