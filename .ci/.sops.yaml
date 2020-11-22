@@ -1,0 +1,6 @@
+creation_rules:
+  - path_regex: .*$
+    key_groups:
+      - pgp:
+          - "4774EB1BF21D57E93221CF0262556A61E301DC21" # colemickens "bad" gpgkey (replace w/ solokey v2)
+          - "EAE0488FD59B66251E9004D1D7FA118E53E6D398" # srht-builder manually made key

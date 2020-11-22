@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
-	"regexp"
 
 	"net"
 	"net/url"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/colemickens/niche/pkg/nixclient"
+
 	_ "github.com/graymeta/stow/azure"
 	_ "github.com/graymeta/stow/b2"
 	_ "github.com/graymeta/stow/google"
@@ -25,8 +26,7 @@ import (
 	_ "github.com/graymeta/stow/swift"
 )
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+var nix nixclient.NixClient = nixclient.NixClientCli{}
 
 func preprocessHostArg(host string) (*url.URL, error) {
 	if !strings.HasPrefix(host, "https://") || !strings.HasPrefix(host, "http://") {
@@ -43,13 +43,14 @@ func init() {
 	}
 }
 
-func main() {
-	var rootCmd = &cobra.Command{Use: "niche"}
+//
+// NICHE QUEUE
+var argQueue struct {
+	socketPath string
+}
 
-	var argQueue struct {
-		socketPath string
-	}
-	var cmdQueue = &cobra.Command{
+func getCmdQueue() *cobra.Command {
+	cmdQueue := &cobra.Command{
 		Use:    "queue",
 		Hidden: true, // only used internally, in all usages
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -74,19 +75,19 @@ func main() {
 		},
 	}
 	cmdQueue.PersistentFlags().StringVarP(&argQueue.socketPath, "socket", "s", "", "path of the socket to write paths to")
-	rootCmd.AddCommand(cmdQueue)
+	return cmdQueue
+}
 
-	cmdConfig := &cobra.Command{
-		Use:   "config",
-		Short: "commands to download/upload/initialize a config file",
-	}
+//
+// NICHE CONFIG INIT
+var argConfigInit struct {
+	kind         string
+	container    string
+	fingerprints []string
+}
 
-	var argConfigInit struct {
-		kind         string
-		container    string
-		fingerprints []string
-	}
-	var cmdConfigInit = &cobra.Command{
+func getCmdConfigInit() *cobra.Command {
+	cmdConfigInit := &cobra.Command{
 		Use:    "init",
 		Hidden: true,
 		Args:   cobra.MinimumNArgs(1),
@@ -95,12 +96,13 @@ func main() {
 			if argConfigInit.kind == "" || argConfigInit.container == "" || len(argConfigInit.fingerprints) == 0 {
 				log.Fatal().Msg("kind, fingerprint, and container must all be specified")
 			}
-
-			// use existing signing key, or make a new one
 			var privateKeyStr string
 			var publicKeyStr string
+			var found bool
 			var err error
-			if privateKeyStr, found := os.LookupEnv("NICHE_SIGNING_KEY"); found {
+
+			privateKeyStr, found = os.LookupEnv("NICHE_SIGNING_KEY")
+			if found {
 				pubFromPrivateKeyStr := func(s string) (string, error) {
 					return "", nil
 				}
@@ -148,12 +150,17 @@ func main() {
 	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.kind, "kind", "k", "", "the 'kind' of storage to use (from graymeta/stow)")
 	cmdConfigInit.PersistentFlags().StringVarP(&argConfigInit.container, "container", "c", "", "the name of the container to use (aws bucket, azure container name, etc)")
 	cmdConfigInit.PersistentFlags().StringSliceVarP(&argConfigInit.fingerprints, "fingerprints", "p", []string{}, "the gpg fingerprint(s) to use for encrypting/decrypting the config (list multiple times, and/or comma separated)")
-	cmdConfig.AddCommand(cmdConfigInit)
+	return cmdConfigInit
+}
 
-	var argConfigDownload struct {
-		configFilePath string
-	}
-	var cmdConfigDownload = &cobra.Command{
+//
+// NICHE CONFIG DOWNLOAD
+var argConfigDownload struct {
+	configFilePath string
+}
+
+func getCmdConfigDownload() *cobra.Command {
+	cmdConfigDownload := &cobra.Command{
 		Use:  "download",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -185,12 +192,17 @@ func main() {
 		},
 	}
 	cmdConfigDownload.PersistentFlags().StringVarP(&argConfigDownload.configFilePath, "config", "f", "", "where to save the downloaded and decrypted config")
-	cmdConfig.AddCommand(cmdConfigDownload)
+	return cmdConfigDownload
+}
 
-	var argConfigUpload struct {
-		configFilePath string
-	}
-	var cmdConfigUpload = &cobra.Command{
+//
+// NICHE CONFIG UPLOAD
+var argConfigUpload struct {
+	configFilePath string
+}
+
+func getCmdConfigUpload() *cobra.Command {
+	cmdConfigUpload := &cobra.Command{
 		Use: "upload",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := clientFromFile(argConfigUpload.configFilePath)
@@ -199,9 +211,7 @@ func main() {
 			}
 			defer c.stowClient.Close()
 
-			// TODO: (inside reupload config) generate public config json? uploadConfigs() does both?
-
-			err = c.reuploadConfig() // TODO: rename func?
+			err = c.reuploadConfig()
 			if err != nil {
 				return err
 			}
@@ -212,11 +222,13 @@ func main() {
 		},
 	}
 	cmdConfigUpload.PersistentFlags().StringVarP(&argConfigUpload.configFilePath, "config", "f", "", "path to config file to init/force overwrite")
-	cmdConfig.AddCommand(cmdConfigUpload)
+	return cmdConfigUpload
+}
 
-	rootCmd.AddCommand(cmdConfig)
-
-	var cmdBuild = &cobra.Command{
+//
+// NICHE BUILD
+func getCmdBuild() *cobra.Command {
+	cmdBuild := &cobra.Command{
 		Use:   "build",
 		Short: "builds an INSTALLABLE and uploads each output as they're built",
 		Args:  cobra.MinimumNArgs(1),
@@ -250,22 +262,48 @@ func main() {
 			wg := sync.WaitGroup{}
 			queue := make(chan string, 1000)
 
-			// start accepting clients
-			go c.listen(socketPath, queue)
-			go c.processBuildQueue(queue, &wg, alwaysOverwrite)
+			listener, err := newReceiver(c.nix, socketPath, queue)
+			if err != nil {
+				return err
+			}
+			go listener.run()
+			defer listener.close()
 
-			err = nixBuild(*cacheURL, socketPath, extraArgs...)
+			// process the build queue
+			go processBuildQueue(c, queue, &wg, alwaysOverwrite)
+
+			err = nix.Build(socketPath, extraArgs...)
 			if err != nil {
 				return err
 			}
 
 			wg.Wait()
-
-			log.Info().Msg("done")
+			log.Info().Msg("all done.")
 			return nil
 		},
 	}
-	rootCmd.AddCommand(cmdBuild)
+	return cmdBuild
+}
+
+func main() {
+	var rootCmd = &cobra.Command{Use: "niche"}
+
+	rootCmd.AddCommand(getCmdQueue())
+
+	cmdConfig := &cobra.Command{
+		Use:   "config",
+		Short: "commands to download/upload/initialize a config file",
+	}
+	cmdConfig.AddCommand(getCmdConfigInit())
+	cmdConfig.AddCommand(getCmdConfigDownload())
+	cmdConfig.AddCommand(getCmdConfigUpload())
+	rootCmd.AddCommand(cmdConfig)
+
+	// TODO: rootCmd.AddCommand(cmdShow)
+
+	rootCmd.AddCommand(getCmdBuild())
+
+	// TODO: rootCmd.AddCommand(cmdUpload)
 
 	rootCmd.Execute()
 }

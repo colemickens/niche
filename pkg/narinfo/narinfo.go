@@ -1,4 +1,4 @@
-package main
+package narinfo
 
 import (
 	"crypto/ed25519"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type narInfo struct {
+type NarInfo struct {
 	StorePath   string
 	URL         string
 	Compression string
@@ -22,7 +22,7 @@ type narInfo struct {
 	CA          string
 }
 
-func (ni narInfo) String() string {
+func (ni NarInfo) String() string {
 	out := ""
 	out += "StorePath: " + ni.StorePath + "\n"
 	out += "URL: " + ni.URL + "\n"
@@ -53,11 +53,11 @@ func (ni narInfo) String() string {
 }
 
 // ContentType returns the mime content type of the object
-func (ni narInfo) ContentType() string {
+func (ni NarInfo) ContentType() string {
 	return "text/x-nix-narinfo"
 }
 
-func (ni *narInfo) AddSignature(privateKeyStr string) error {
+func (ni *NarInfo) AddSignature(privateKeyStr string) error {
 	// look for a sig with our prefix
 	// if not found calculate sig, add
 	parts := strings.Split(privateKeyStr, ":")
@@ -91,21 +91,28 @@ func (ni *narInfo) AddSignature(privateKeyStr string) error {
 	return nil
 }
 
-func (ni *narInfo) Fingerprint() ([]byte, error) {
-	narHash, err := nixToBase32(ni.NarHash)
-	if err != nil {
-		return nil, err
+func ensurePrefixed(storePath string) string {
+	if !strings.HasPrefix(storePath, "/nix/store/") {
+		storePath = "/nix/store/" + storePath
 	}
-	narHashPrefixed := fmt.Sprintf("sha256:%s", narHash)
+	return storePath
+}
 
-	fp := strings.Join(
-		[]string{
-			"1",
-			ni.StorePath,
-			narHashPrefixed,
-			fmt.Sprintf("%d", ni.NarSize),
-			strings.Join(ni.References, ","),
-		}, ";")
+func ensureBase32Hash(hash string) string {
+	return hash
+}
 
+func (ni *NarInfo) Fingerprint() ([]byte, error) {
+	storePath := ensurePrefixed(ni.StorePath)
+	narHash := ensureBase32Hash(ni.NarHash)
+	narSize := fmt.Sprintf("%d", ni.NarSize)
+
+	prefixedRefs := make([]string, len(ni.References))
+	for i, p := range ni.References {
+		prefixedRefs[i] = ensurePrefixed(p)
+	}
+	references := strings.Join(prefixedRefs, ",")
+
+	fp := strings.Join([]string{"1", storePath, narHash, narSize, references}, ";")
 	return []byte(fp), nil
 }

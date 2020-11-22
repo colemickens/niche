@@ -1,26 +1,20 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
-	"strings"
-	"sync"
 
+	"github.com/colemickens/niche/pkg/narenc"
+	"github.com/colemickens/niche/pkg/nixclient"
 	"github.com/graymeta/stow"
-	_ "github.com/graymeta/stow/azure"
-	_ "github.com/graymeta/stow/google"
-	_ "github.com/graymeta/stow/s3"
 	"github.com/rs/zerolog/log"
-	sops "go.mozilla.org/sops/v3"
+	"go.mozilla.org/sops/v3"
 	"go.mozilla.org/sops/v3/aes"
 	"go.mozilla.org/sops/v3/cmd/sops/common"
 	"go.mozilla.org/sops/v3/cmd/sops/formats"
@@ -28,14 +22,15 @@ import (
 	"go.mozilla.org/sops/v3/version"
 )
 
-// TODO: I probably need lots of locking around the client here since it's getting hit up from multiple places
-
-const wkPrivateConfig = ".well-known/niche-private-config"
+const wkPrivateConfig string = "niche.private.json"
+const wkPublicConfig string = "niche.json"
+const nicheCacheInfoPath string = "nix-cache-info"
 
 type nicheClient struct {
 	config        privateNicheConfig
 	stowClient    stow.Location
 	stowContainer stow.Container
+	nix           nixclient.NixClient
 }
 
 func clientFromFile(pth string) (*nicheClient, error) {
@@ -50,6 +45,8 @@ func clientFromFile(pth string) (*nicheClient, error) {
 	return clientFromBytes(byts)
 }
 
+// TODO: change this to a string so that we move URL validation
+// here, and/or support file:////tmp/stow-local-for-golang-integration-tests
 func clientFromSops(cacheURL url.URL) (*nicheClient, error) {
 	// copy cacheURL and join path wi/ the config path-suffix
 	privateNicheConfigURL := cacheURL
@@ -62,6 +59,8 @@ func clientFromSops(cacheURL url.URL) (*nicheClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	encryptedStr := string(encryptedBytes)
+	_ = encryptedStr
 	decryptedBytes, err := decrypt.Data(encryptedBytes, "binary")
 	if err != nil {
 		return nil, err
@@ -79,6 +78,17 @@ func clientFromBytes(byts []byte) (*nicheClient, error) {
 }
 
 func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheClient, error) {
+	if cfg.StorageKind == "fake" {
+		tempDir, err := ioutil.TempDir("", "")
+		if err != nil {
+			return nil, err
+		}
+		cfg.StorageKind = "local"
+		cfg.StorageConfigMap = map[string]string{
+			"path": tempDir,
+		}
+	}
+
 	loc, err := stow.Dial(cfg.StorageKind, stow.ConfigMap(cfg.StorageConfigMap))
 	if err != nil {
 		return nil, err
@@ -103,6 +113,7 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheCl
 	}
 
 	newClient := &nicheClient{
+		nix:           nixclient.NixClientCli{},
 		config:        cfg,
 		stowClient:    loc,
 		stowContainer: cntr,
@@ -112,19 +123,42 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheCl
 }
 
 func (c *nicheClient) reuploadConfig() error {
-	decryptedNewCfgBytes, err := json.Marshal(c.config)
+	privCfgBytesRaw, err := json.Marshal(c.config)
 	if err != nil {
 		return err
 	}
-	encNewCfgBytes, err := c.sopsEncrypt(decryptedNewCfgBytes)
+	log.Info().Msg("encrypting config with sops")
+	encrPrivCfg, err := c.sopsEncrypt(privCfgBytesRaw)
 	if err != nil {
 		return err
 	}
-	buf := bytes.NewBuffer(encNewCfgBytes)
-	_, err = c.stowContainer.Put(wkPrivateConfig, buf, int64(len(encNewCfgBytes)), nil)
+	buf := bytes.NewBuffer(encrPrivCfg)
+	log.Info().Msg("uploading private niche config")
+	_, err = c.stowContainer.Put(wkPrivateConfig, buf, int64(len(encrPrivCfg)), nil)
 	if err != nil {
 		return err
 	}
+
+	pc := publicNicheConfig{
+		PublicKey: c.config.PublicKey,
+	}
+	publicBytes, err := json.Marshal(pc)
+	if err != nil {
+		return err
+	}
+	log.Info().Msg("uploading public niche config")
+	_, err = c.stowContainer.Put(wkPublicConfig, bytes.NewBuffer(publicBytes), int64(len(publicBytes)), nil)
+	if err != nil {
+		return err
+	}
+
+	cacheInfoBytes := []byte("StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 40")
+	log.Info().Msg("uploading nix-cache-info")
+	_, err = c.stowContainer.Put(nicheCacheInfoPath, bytes.NewBuffer(cacheInfoBytes), int64(len(cacheInfoBytes)), nil)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -178,19 +212,51 @@ func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 	return encryptedFileBytes, nil
 }
 
-func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
+func (c *nicheClient) ensurePath(storePath string) error {
 	log.Trace().Str("storePath", storePath).Msg("checking path")
 
-	narPath, infoPath := narPathsFromStorePath(storePath)
-	_, errNarXz := c.stowContainer.Item(narPath)
-	_, errNarInfo := c.stowContainer.Item(infoPath)
-	if errNarXz == nil && errNarInfo == nil && !alwaysOverwrite {
-		log.Trace().Str("storePath", storePath).Msg("skipping path")
-		return nil
+	niItemPath, err := narinfoItemPath(storePath)
+	if err != nil {
+		return err
+	}
+
+	// TODO: fetch "upstreams" from "public config"
+	// check for the narinfo on there, return if on one of their caches
+	_, errNarInfo := c.stowContainer.Item(niItemPath)
+	if errNarInfo != nil {
+		// there was an error retrieving the item
+		log.Trace().Str("storePath", storePath).Msg("narinfo missing")
+		return c.uploadPath(storePath)
+	}
+
+	return nil
+}
+
+func (c *nicheClient) uploadPath(storePath string) error {
+	// if the narinfo exists, assume that we're in a good state
+	// since we always upload the narinfo last
+	niItemPath, err := narinfoItemPath(storePath)
+	if err != nil {
+		return err
 	}
 
 	// we need the NAR hash if we don't have (it in) the narinfo
-	compressedNarFilePath, err := nixDumpPath(storePath)
+	// compressedNarFilePath, err := c.nix.DumpPath(storePath)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer func() {
+	// 	log.Trace().Str("storePath", storePath).Msg("cleaning tmp compressed nar")
+	// 	os.Remove(compressedNarFilePath)
+	// }()
+
+	// narFile, err := os.Open(compressedNarFilePath)
+	// if err != nil {
+	// 	return err
+	// }
+
+	//compressedNarFilePath, err := c.nix.DumpPath(storePath)
+	compressedNarFilePath, err := narenc.DumpPathXz(storePath)
 	if err != nil {
 		return err
 	}
@@ -198,128 +264,38 @@ func (c *nicheClient) ensurePath(storePath string, alwaysOverwrite bool) error {
 		log.Trace().Str("storePath", storePath).Msg("cleaning tmp compressed nar")
 		os.Remove(compressedNarFilePath)
 	}()
-	stat, err := os.Stat(compressedNarFilePath)
-	if err != nil {
-		return err
-	}
-	narSize := stat.Size()
+
 	narFile, err := os.Open(compressedNarFilePath)
 	if err != nil {
 		return err
 	}
-	narItem, err := c.stowContainer.Put(narPath, narFile, narSize, nil)
+
+	pathInfo, err := c.nix.PathInfo(storePath)
 	if err != nil {
 		return err
 	}
-	log.Info().Str("path", narItem.Name()).Msg("uploaded path")
 
-	fileHash, err := nixHashFile(storePath)
+	narInfo, err := narInfoForNarFile(*pathInfo, compressedNarFilePath)
 
-	narInfo, err := narInfoForPath(storePath, narPath, fileHash, narSize)
-	if err != nil {
-		return err
-	}
 	err = narInfo.AddSignature(c.config.SigningKey)
 	if err != nil {
 		return err
 	}
 
+	// Upload
+	narItem, err := c.stowContainer.Put(narInfo.URL, narFile, narInfo.NarSize, nil)
+	if err != nil {
+		return err
+	}
+	log.Info().Str("path", narItem.Name()).Msg("uploaded path")
+
 	narInfoStr := narInfo.String()
 	narInfoRdr := bytes.NewBufferString(narInfoStr)
-	infoItem, err := c.stowContainer.Put(infoPath, narInfoRdr, int64(len(narInfoStr)), nil)
+	infoItem, err := c.stowContainer.Put(niItemPath, narInfoRdr, int64(len(narInfoStr)), nil)
 	if err != nil {
 		return err
 	}
 	log.Info().Str("path", infoItem.Name()).Msg("uploaded path")
 
 	return nil
-}
-
-// TODO: we need to write to a single queue
-// right now each build client get its own queue
-// which is also what cachix does and it seems bad
-func (c *nicheClient) listen(socketPath string, queue chan string) error {
-	if err := os.RemoveAll(socketPath); err != nil {
-		log.Err(err).Str("path", socketPath).Msg("failed to clean up socket ahead of time")
-	}
-
-	l, err := net.Listen("unix", socketPath)
-	if err != nil {
-		log.Err(err).Msg("failed to listen")
-	}
-	defer l.Close()
-
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Err(err).Msg("failed to accept new connection")
-		}
-		go handle(c, conn, queue)
-	}
-}
-
-func handle(c *nicheClient, conn net.Conn, queue chan string) {
-	defer func() {
-		log.Info().Str("remoteAddr", conn.RemoteAddr().String()).Msg("closing connection")
-		conn.Close()
-	}()
-
-	bufReader := bufio.NewReader(conn)
-	for {
-		byts, err := bufReader.ReadBytes('\n')
-		if err != nil {
-			log.Warn().Err(err).Msg("?????")
-			break
-		}
-		storePath := strings.TrimSpace(string(byts))
-		log.Trace().Str("storePath", storePath).Msg("received storePath")
-
-		if storePath == "QUIT" {
-			log.Trace().Msg("told to quit")
-			queue <- storePath
-			break
-		}
-
-		allStorePaths, err := getAllStorePaths(storePath)
-		if err != nil {
-			log.Warn().Err(err).Msg("?????")
-			break
-		}
-
-		for _, storePath := range allStorePaths {
-			log.Info().Str("storePath", storePath).Msg("sending storePath to the queue")
-			queue <- storePath
-		}
-	}
-}
-
-func (c *nicheClient) processBuildQueue(queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
-	wg.Add(1)
-	defer wg.Done()
-
-	seenPaths := []string{}
-
-	for storePath := range queue {
-		if storePath == "QUIT" {
-			log.Info().Msg("leaving build queue")
-			return
-		}
-		for _, seenPath := range seenPaths {
-			if strings.EqualFold(storePath, seenPath) {
-				log.Trace().Str("storePath", storePath).Msg("skipping already processed path")
-				continue
-			}
-		}
-		c.ensurePath(storePath, alwaysOverwrite)
-		seenPaths = append(seenPaths, storePath)
-		log.Info().Str("storePath", storePath).Msg("ensured storePath")
-	}
-}
-
-func narPathsFromStorePath(storePath string) (string, string) {
-	storePathBase := filepath.Base(storePath)
-	narPath := fmt.Sprintf("nars/%s.nar.xz", storePathBase)
-	infoPath := storePathBase + ".narinfo"
-	// TODO: write test for this (that should currently fail)
-	return narPath, infoPath
 }

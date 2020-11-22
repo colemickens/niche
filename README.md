@@ -7,64 +7,77 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
 (**Warning**: `niche` does no locking currently. I'm not sure what happens if clients concurrently upload a path.)
 
-## demo
-(or maybe a GIF with a note that it links to a scrollable asciinema)
-[link to screenshot of asciinema]
-
-
 ## features
 
-### wrapped `nix build`
-`niche build` wraps `nix build` and uploads each build result *as they're produced*. This allows you to cache intermediate builds,
-even if the full build result doesn't end up finishing successfully.
+* **wrapped `nix build`** _(upload as you build)_
 
-### signing key + cloud credentials protected by `sops`
-The configuration for a `niche` cache (including cloud credentials and the signing key)
-is stored, encrypted, in the cache itself. `niche` uses [`sops`](https://github.com/mozilla/sops)
-to encrypt/decrypt on the fly, as necessary.
+  `niche build` wraps `nix build` and uploads each build result *as they're produced*. This allows you to cache partial builds, even if the full build ends up failing.
 
-This means `niche` comes with automatic delegation and auditing by using `sop`'s KMS/KeyVault integration, or
-automatic non-cloud team key sharing by listing your team's GPG keys.
+* **(local-) configuration-free!**
 
-### bring your own storage
-AWS S3, Azure Blob Storage, Google Cloud Storage, Wasabi, Minio? **Yes!**
-If [`stow`](https://github.com/graymeta/stow) supports it, so do we (in theory).
+  The configuration for a `niche` cache (including storage credentials and signing key) is stored, encrypted, in the cache itself. Many users will never need to look at it!
+
+* **`sops` - flexible, secure, shared-access to the signing key**
+
+  `niche` uses the [`mozilla/sops`](https://github.com/mozilla/sops) tool, to encrypt and decrypt the configuration on-the-fly. It encrypts the config with multiple keys like GPG fingerprints. It can also encrypt using cloud KMS providers, thereby delegating access control to an auditable cloud resource.
+
+* **easy (non-interactive, stateless) usage**
+
+  The handling of key material and configuration is entirely hidden from the user in most cases. Any user with a valid key can upload without any other configuration.
+
+  As an example, consider `builds.sr.ht` where GPG integration is built in: Listing the fingerprint of a key enrolled with `builds.sr.ht` in the config file is all it takes to allow your jobs to be able to upload.
+
+* **bring your own storage (Azure, Amazon, Google, Minio, Wasabi)**
+
+  If [`stow`](https://github.com/graymeta/stow) supports it, so do we (in theory)!
+
+  `niche` can manage Nix mirrors **behind firewalls**, in **Internet-less** virtual networks, leverage **free internal bandwidth** in cloud provider networks, etc.
 
 ## usage
 
-**`niche init`** will create a signing key and create an initial configuration file.
+* **`niche config init -k <kind> -f <fingerprint1>[,<fp2>]`** will create an initial signing key and configuration file:
+  ```bash
+  ❯ export FP="8A94ED58A476A13AE0D6E85E9758078DE5308308" # change
+  ❯ export AZURE_ACCOUNT='azstrg01'                      # change
+  ❯ export AZURE_KEY='base64lookignstringhere=='         # change
+  ❯ niche config init -k 'azure' -f "${FP}"
+  ```
 
-```bash
-# initialize a configuration file (creates a signing key for you)
-niche init -k 'azure' -f '4774EB1BF21D57E93221CF0262556A61E301DC21' -c ./config.json
+* **`niche show <repo>`** shows the public key for an existing niche repo:
+  ```bash
+  ❯ niche show 'azstrg01.blob.core.windows.net/cache'
+  az.cache.r10e.tech:thislookslikeaned25519key==
+  ```
 
-# initialize a new config file, including a new signing key if none is specified,
-# creates the storage container and uploads the file
-niche config init 'azdev2020nov.blob.core.windows.net/cache' -c ./config.json
+* **`niche build <repo> -- [nix build flags]`** wraps `nix build` and uploads new store paths *as they're built*:
+  ```bash
+  ❯ niche build 'https://azstrg01.blob.core.windows.net/cache' -- \
+    '.#hosts.azlinux.config.system.build.toplevel' -j0 --keep-going
+  ```
 
-# upload a config file directly to its storage
-niche config upload -f ./config.json
+* **`echo [<path>\n...] | niche upload <repo>`** uploads paths piped over stdin:
+  ```bash
+  ❯ nix build 'github:nixos/nixpkgs/nixos-unstable#firefox' --out-link '/tmp/outlink1'
+  ❯ nix build 'github:nixos/nixpkgs/nixos-unstable#neovim' --out-link '/tmp/outlink2'
+  ❯ echo $'/tmp/outlink1\n/tmp/outlink2' | niche upload "azstrg01.blob.core.windows.net/cache"
+  ```
 
-# (PUBLIC) show info about a niche repo
-niche show 'azdev2020nov.blob.core.windows.net/cache'
-# extra-nix-options=""
-# publicCacheKey=""
+* **`niche upload [<path>...]`** uploads paths passed as args
+  ```bash
+  ❯ nix build github:nixos/nixpkgs/nixos-unstable#emacs --out-link /tmp/outlink1
+  ❯ nix build github:nixos/nixpkgs/nixos-unstable#neovim --out-link /tmp/outlink2
+  ❯ niche upload "azstrg01.blob.core.windows.net/cache" /tmp/outlink1 /tmp/outlink2
+  ```
 
-# invoke `nix build` and upload all build results as they're built
-niche build 'https://azdev2020nov.blob.core.windows.net/cache' -- \
-  '.#hosts.azlinux.config.system.build.toplevel' -j0 --keep-going
+* **`niche config`** commands help download and overwrite a repo's config file.
+  This allows for custom `sops` keygroup configuration, override of keys, etc.
+  ```bash
+  ❯ niche config download -f '/tmp/tmpnicheconfig' "azstrg01.blob.core.windows.net/cache"
+  ❯ nvim '/tmp/tmpnicheconfig'
+  ❯ niche config upload -f '/tmp/tmpnicheconfig'
+  ````
 
-# or, just upload a bunch of paths, right now (TODO: DOESNT WORK YET)
-storePath="/nix/store/p9vy4sgsh6m2kgph9i2mv3qgr3iy1afc-firefox-82.0.2"
-echo $storePath | niche upload "azdev2020nov.blob.core.windows.net/cache"
-
-# run `niche` with the most verbose output log level
-NICHE_DEBUG=any_non_empty_valu niche build ...
-```
-
-You may need to create a config file by hand:
-- if you want to configure the Sops encryption key groups manually, or,
-- if you have existing signing keys you want to use instead of generating new ones
+Set `NICHE_DEBUG` to a non-empty value for the most verbose logging out.
 
 ## suggested contributions
 
@@ -94,15 +107,6 @@ In a dream world, Sops would get a RIIR, with a more limited feature-set, akin, 
 **stow**: I wish that `stow` had a proper `Provider` struct that could support `Kind()`, and `ConfigFields()->[]string`.
 And then the toplevel package should have `Providers()` or `Provider()`. Then there could be an interface `ConfigWithMap()` to take a `map[string]string`, etc.
 This would nicely increase the ability to make tooling around Stow itself.
-
-## code layout
-
-- `client.go`: code related interacting with the remote storage repo, including handling encrypting the config
-- `config.go`: the niche config structures and functions
-- `crypt.go`: code to convert our own keygroups into keygroups sops expects, and the code to call sops
-- `listen.go`: this is the code that listens on the domain socket
-- `narinfo.go`: functions to create narinfo files and generating a signature for a NAR path/archive
-- `nix.go`: functions that do `nix` commands or other store operations
 
 ## todo (pre-release)
 

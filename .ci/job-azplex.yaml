@@ -1,0 +1,18 @@
+image: nixos/unstable
+sources:
+  - git@github.com:colemickens/niche
+secrets:
+  - bd070f2a-01d1-4b7b-9795-036deb06912c # id_ed25519
+environment:
+  CI_BUILD: "sr.ht"
+tasks:
+  - flake-update: |
+      cd nixpkgs-wayland
+      nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable --command "nix --experimental-features 'nix-command flakes' flake update --recreate-lock-file --no-registries"
+  - unlock-secrets: |
+      cd niche/.ci
+      nix-shell --pure --command "./util.sh d"
+  - test-azure: |
+      cd niche/tests
+      nix-shell --pure --command "./test-azure.sh"
+  - # TODO: push flake updates back up to git (will need a github token in .ci/encrypted)
