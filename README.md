@@ -7,6 +7,8 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
 (**Warning**: `niche` does no locking currently. I'm not sure what happens if clients concurrently upload a path.)
 
+*If you find this valuable, **please** let me know. Even if it's just a star or an email.*
+
 ## features
 
 * **wrapped `nix build`** _(upload as you build)_
@@ -98,6 +100,8 @@ If you're interested in contributing to `niche`, here are some suggestions:
 5. Come up with a better project "tagline" to use as the first line of text + repo description
 6. Add a mode where a user can `listen` and then `queue` from separate processes (one `listen` process, many queues triggering multiple simultaenous `nix build`s, for example)
 7. Figure out the right way to plumb `nix build` output to the screen, since the user wants to monitor the build still
+8. Might be worth pulling `stow` source into the tree, keeping it updated better, etc
+
 
 ## long-term musings
 

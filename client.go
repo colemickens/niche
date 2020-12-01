@@ -100,7 +100,7 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheCl
 			return nil, fmt.Errorf("container '%s' already exists", cfg.StorageContainer)
 		}
 		log.Info().Str("container", cfg.StorageContainer).Msgf("Creating storage container")
-		cntr, err = loc.CreateContainer(cfg.StorageContainer)
+		cntr, err = loc.CreatePublicContainer(cfg.StorageContainer, false)
 		if err != nil {
 			return nil, err
 		}
@@ -160,10 +160,6 @@ func (c *nicheClient) reuploadConfig() error {
 	}
 
 	return nil
-}
-
-func (c *nicheClient) signNarPrint(print string) (string, error) {
-	return "", nil
 }
 
 func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {

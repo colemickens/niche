@@ -11,7 +11,7 @@ import (
 // and the caller could easily spawn multiple processors,
 // if we wanted to be able to handle multiple paths concurrently
 
-func processBuildQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
+func processUploadQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, alwaysOverwrite bool) {
 	wg.Add(1)
 	defer wg.Done()
 

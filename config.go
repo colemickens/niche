@@ -49,7 +49,7 @@ func configFieldsForKind(kind string) []string {
 		return []string{"path"}
 	}
 
-	log.Fatal().Msg("invalid storage kind")
+	log.Fatal().Str("kind", kind).Msg("invalid storage kind")
 	return nil
 }
 

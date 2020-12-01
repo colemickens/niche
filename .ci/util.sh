@@ -2,12 +2,6 @@
 set -euo pipefail
 set -x
 
-function ssh-to-pgp() {
-  nix --experimental-features 'nix-command flakes' \
-    run 'github:Mic92/sops-nix#ssh-to-pgp' -- "${@}"
-  #command ~/code/sops-nix/ssh-to-pgp "${@}"
-}
-
 function d() {
   mkdir -p encrypted; cd encrypted
   for f in *; do

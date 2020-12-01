@@ -2,6 +2,8 @@ module github.com/colemickens/niche
 
 go 1.15
 
+replace github.com/graymeta/stow => github.com/colemickens/stow v0.2.7-0.20201201033445-f8d15bf57204
+
 require (
 	cloud.google.com/go/storage v1.10.0 // indirect
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
@@ -10,6 +12,7 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.6.1 // indirect
 	github.com/ulikunitz/xz v0.5.8
+	github.com/urfave/cli/v2 v2.3.0
 	go.mozilla.org/sops/v3 v3.6.1
 	gopkg.in/yaml.v2 v2.3.0
 )
