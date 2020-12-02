@@ -41,7 +41,7 @@ func build(cacheNameRaw string, extraArgs []string) error {
 	defer listener.close()
 
 	// process the build queue
-	go processBuildQueue(c, queue, &wg, alwaysOverwrite)
+	go processUploadQueue(c, queue, &wg, alwaysOverwrite)
 
 	err = nix.Build(socketPath, extraArgs...)
 	if err != nil {

@@ -103,7 +103,10 @@ func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
 	nbArgs := []string{"build"}
 	nbArgs = append(nbArgs, buildArgs...)
 	nbArgs = append(nbArgs, "--option", "post-build-hook", postBuildHookPath, "--out-link", outLink)
-	cmd := exec.Command("nix", nbArgs...)
+	fullCmd := append([]string{"nix"}, nbArgs...)
+	cmd := exec.Command(fullCmd[0], fullCmd[1:]...)
+
+	log.Info().Strs("cmd", fullCmd).Msg("calling nix")
 
 	// TODO output/error handling
 	_, err = cmd.Output()
