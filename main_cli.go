@@ -19,8 +19,17 @@ func mainCli() error {
 				Name:   "queue",
 				Usage:  "queue a new path to be uploaded to a niche listener",
 				Hidden: true,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "socket-path",
+						Aliases: []string{"s"},
+						Value:   "",
+						Usage:   "the path to the listening niche socket",
+					},
+				},
 				Action: func(c *cli.Context) error {
-					return queue(argQueue.socketPath)
+					socketPath := c.String("socket-path")
+					return queue(socketPath)
 				},
 			},
 			{
