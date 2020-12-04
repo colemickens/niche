@@ -5,9 +5,8 @@ set -x
 
 (cd ..; go build .)
 
-thing="github:colemickens/flake-impure"
-cachename="cache${RANDOM}"
-cache="azdev2020nov.blob.core.windows.net/${cachename}"
-kind="azure"
-
+export thing="github:colemickens/flake-impure"
+export cachename="cache${RANDOM}"
+export cache="azdev2020nov.blob.core.windows.net/${cachename}"
+export kind="azure"
 ./test-common.sh

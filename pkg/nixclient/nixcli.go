@@ -111,8 +111,8 @@ func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
 	// TODO output/error handling
 	_, err = cmd.Output()
 	if eerr, ok := err.(*exec.ExitError); ok {
-		log.Info().Msg(string(eerr.Stderr))
-		panic(eerr)
+		log.Warn().Msg(string(eerr.Stderr))
+		return err
 	}
 
 	finalBuiltPaths, err := nixc.QueryPaths(outLink)

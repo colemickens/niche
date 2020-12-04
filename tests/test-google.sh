@@ -7,7 +7,7 @@ set -x
 
 export thing="github:colemickens/flake-impure"
 export cachename="cache${RANDOM}"
-export cache="${cachename}.s3.amazonaws.com"
-export kind="s3"
+export cache="storage.cloud.google.com/${cachename}"
+export kind="google"
 
 ./test-common.sh

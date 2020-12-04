@@ -5,6 +5,8 @@
 `niche` uploads store paths to your binary cache mirror running in any cloud blob storage. It can also wrap `nix build`
 to upload build artifacts *as they're produced* rather than waiting for a successful build.
 
+**Tested with**: Azure, B2, Google Storage, S3, Wasabi
+
 (**Warning**: `niche` does no locking currently. I'm not sure what happens if clients concurrently upload a path.)
 
 *If you find this valuable, **please** let me know. Even if it's just a star or an email.*
@@ -85,6 +87,10 @@ Set `NICHE_DEBUG` to a non-empty value for the most verbose logging out.
 
 If you're interested in contributing to `niche`, here are some suggestions:
 
+0. Separate the queue for checking narinfo and doing upload?
+
+0. Suggest Age usage instead of GPG? Ask ghc about this
+
 0. SOme of the log handling is dumb, I recreated the same builder start over and over.
 0. Improve error handling. Not sure what state of the art is in Golang today.
 0. Add a `niche init` option that walks the user through initial config file creation
@@ -101,6 +107,8 @@ If you're interested in contributing to `niche`, here are some suggestions:
 6. Add a mode where a user can `listen` and then `queue` from separate processes (one `listen` process, many queues triggering multiple simultaenous `nix build`s, for example)
 7. Figure out the right way to plumb `nix build` output to the screen, since the user wants to monitor the build still
 8. Might be worth pulling `stow` source into the tree, keeping it updated better, etc
+
+Fix this: https://github.com/NixOS/nix/issues/4294
 
 
 ## long-term musings

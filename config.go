@@ -31,38 +31,44 @@ type publicNicheConfig struct {
 	//UpstreamKeys    string `json:"upstreamKeys"`
 }
 
-func configFieldsForKind(kind string) []string {
+func configFieldsForKind(kind string) ([]string, []string) {
 	switch kind {
 	case "azure":
-		return []string{"account", "key"}
+		return []string{"account", "key"}, []string{}
 	case "s3":
-		return []string{"auth_type", "access_key_id", "secret_key", "region", "endpoint", "disable_ssl", "v2_signing"}
+		return []string{"access_key_id", "secret_key"}, []string{"auth_type", "region", "endpoint", "disable_ssl", "v2_signing"}
 	case "swift":
-		return []string{"username", "key", "tenant_name", "tenant_auth_url"}
+		return []string{"username", "key", "tenant_name", "tenant_auth_url"}, []string{}
 	case "oracle":
-		return []string{"username", "password", "authorization_endpoint"}
+		return []string{"username", "password", "authorization_endpoint"}, []string{}
 	case "google":
-		return []string{"json", "project_id", "scope"}
+		return []string{"json", "project_id", "scope"}, []string{}
 	case "b2":
-		return []string{"account_id", "application_key", "application_key_id"}
+		return []string{"account_id", "application_key", "application_key_id"}, []string{}
 	case "local":
-		return []string{"path"}
+		return []string{"path"}, []string{}
 	}
 
 	log.Fatal().Str("kind", kind).Msg("invalid storage kind")
-	return nil
+	return nil, nil
 }
 
 func getInitialStorageConfigMap(kind string) map[string]string {
-	fields := configFieldsForKind(kind)
+	requiredFields, optionalFields := configFieldsForKind(kind)
 	result := make(map[string]string)
 	missingVals := []string{}
-	for _, fieldName := range fields {
+	for _, fieldName := range requiredFields {
 		envVarName := strings.ToUpper(kind + "_" + fieldName)
 		val, found := os.LookupEnv(envVarName)
 		if !found {
 			missingVals = append(missingVals, envVarName)
 		} else {
+			result[fieldName] = val
+		}
+	}
+	for _, fieldName := range optionalFields {
+		envVarName := strings.ToUpper(kind + "_" + fieldName)
+		if val, found := os.LookupEnv(envVarName); found {
 			result[fieldName] = val
 		}
 	}

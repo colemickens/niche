@@ -7,7 +7,6 @@ set -x
 
 export thing="github:colemickens/flake-impure"
 export cachename="cache${RANDOM}"
-export cache="${cachename}.s3.amazonaws.com"
-export kind="s3"
-
+export cache="s3.us-west-002.backblazeb2.com/${cachename}"
+export kind="b2"
 ./test-common.sh

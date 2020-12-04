@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-set -o allexport; source "${DIR}/../.ci/unencrypted/envvars_${kind}"; set +o allexport
+set -o allexport; source "${DIR}/../.ci/unencrypted/envvars_${variant:-"${kind}"}"; set +o allexport
 function niche() { command ../niche "${@}"; }
+
+env | rg GOOG
 
 set -euo pipefail
 set -x
 
+echo "${DIR}/../.ci/unencrypted/envvars_${variant:-"${kind}"}"
+
 export GNUPGHOME="$(mktemp)"; trap "rm -rf $GNUPGHOME" EXIT
+# rm -rf "$GNUPGHOME"; mkdir -p -m 700 "$GNUPGHOME"
+# gpg --pinentry-mode loopback --batch --passphrase '' \
+#   --quick-generate-key "testkey" rsa2048
+# gpg --export "testkey" > $GNUPGHOME/test.gpg
+# echo
+# gpg --list-keys
+# gpg --with-colons --fingerprint --list-keys "testkey"
+# echo
+# fp="$(gpg --with-colons --fingerprint --list-keys "testkey" \
 rm -rf "$GNUPGHOME"
 mkdir -p -m 700 "$GNUPGHOME"
 email="testperson@example.com"
@@ -15,13 +28,13 @@ cat<<-EOF | gpg --batch --gen-key
 Key-Type: RSA
 Key-Length: 1024
 Name-Real: testperson
-Name-Email: testperson@example.com
+Name-Email: ${email}
 EOF
-gpg --export "$email" > $GNUPGHOME/test.gpg
-fp="$(gpg --with-colons --fingerprint --list-keys "$email" \
+gpg --export "${email}" > $GNUPGHOME/test.gpg
+fp="$(gpg --with-colons --fingerprint --list-keys "${email}" \
   | awk -F: '$1 == "fpr" {print $10;}')"
 
-niche config init -k "${kind}" -c "$cachename" -p "$fp" azdev2020nov
+niche config init -n "${cachename}" -k "${kind}" -b "${cachename}" -p "$fp"
 #TODO: trap "niche destroy --yes-really-delete-it $cache" EXIT # TODO?
 
 # build it so we can grab the outlink (so we can test realization later)
@@ -37,7 +50,7 @@ readlink -f "${outlink}" > $ttt
 rm -rf "${outlink}"
 
 # now build with `niche` so it gets signed+uploaded to our cache
-niche build "$cache" -- "$(cat $ttt)"
+niche build -u "$cache" -- "$(cat $ttt)"
 
 #TODO: alternatively test `niche upload`
 
@@ -45,6 +58,7 @@ niche build "$cache" -- "$(cat $ttt)"
 nix-store --delete "$(cat $ttt)" \
   || nix-store --gc --print-roots | rg bundle || true
 
+niche show ${cache}
 publickey="$(niche show ${cache})"
 
 # make sure it really went away
