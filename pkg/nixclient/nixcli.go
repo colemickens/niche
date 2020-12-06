@@ -84,7 +84,16 @@ func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
 		return err
 	}
 
-	postBuildBody := fmt.Sprintf("#!/bin/sh\n%s queue -s %s", self, socketPath)
+	// DOESNT WORK ON AARCH64 COMMUNITY BOX:
+	// <option1>
+	postBuildBody := fmt.Sprintf("#!/bin/sh\n"+"unset LD_PRELOAD\n"+"%s queue -s %s", self, socketPath)
+	// </option1>
+	// <option2>
+	// TODO: this is also bad, relies on echo/nc being available...
+	_ = self
+	//postBuildBody := fmt.Sprintf("#!/bin/sh\n"+"/run/current-system/sw/bin/echo $OUT_PATHS | /run/current-system/sw/bin/nc -N -U %s", socketPath)
+	// </option2>
+
 	postBuildHookPath := fmt.Sprintf("/tmp/niche_%d_pbh", os.Getpid())
 	f, err := os.Create(postBuildHookPath)
 	if err != nil {
@@ -98,6 +107,9 @@ func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
 	if err := os.Chmod(postBuildHookPath, 0777); err != nil {
 		return err
 	}
+	defer func() {
+		//  os.Unlink(f) // TODO: unlink PBH to get rid of it
+	}()
 
 	outLink := fmt.Sprintf("/tmp/niche_%d_outlink", os.Getpid())
 	nbArgs := []string{"build"}

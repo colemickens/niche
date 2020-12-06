@@ -1,3 +1,10 @@
+## big idea
+
+### Investigate another mode:
+  - build the derivation
+  - walk all the inputs, etc, upload ones that are built
+    - this could let us catch things that we miss between the p-b-h (see issue on nixos/nix)
+
 
 ## suggested contributions
 
@@ -29,10 +36,10 @@ Fix this: https://github.com/NixOS/nix/issues/4294
 10. Add an example where you publish to a $web dir in azure so it can be
     on the root of a subdomain, instead of after some basepath.
 
-11. Investigate another mode: ?
-    - build the derivation
-    - walk all the inputs, etc, upload ones that are built
-      - this could let us catch things that we miss between the p-b-h (see issue on nixos/nix)
+12. Should we have more threads processing uploads?
+13. Should we 'skipping already processed path' ahead of sending it over the socket?
+
+
 
 ## long-term musings
 

@@ -20,6 +20,7 @@ type privateNicheConfig struct {
 	StorageContainer string            `json:"storageContainer"` // TODO: stow's Kind
 	StorageConfigMap map[string]string `json:"storageConfigMap"` // lazy, just let it hand off to Stow
 	KeyGroups        []nicheKeyGroup   `json:"keyGroups"`
+	UpstreamServers  []string          `json:"upstreamServers"`
 }
 
 type publicNicheConfig struct {

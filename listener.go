@@ -66,7 +66,7 @@ func handle(nix nixclient.NixClient, conn net.Conn, queue chan<- string) {
 	for {
 		byts, err := bufReader.ReadBytes('\n')
 		if err != nil {
-			log.Warn().Err(err).Msg("?????")
+			log.Warn().Err(err).Msg("failed reading bytes")
 			break
 		}
 		storePath := strings.TrimSpace(string(byts))
@@ -83,7 +83,7 @@ func handle(nix nixclient.NixClient, conn net.Conn, queue chan<- string) {
 		// that's what we actually queue for handling as individal good store paths
 		allStorePaths, err := nix.QueryPaths(storePath)
 		if err != nil {
-			log.Warn().Err(err).Msg("?????")
+			log.Warn().Err(err).Msg("unexpected error querying all store paths")
 			break
 		}
 

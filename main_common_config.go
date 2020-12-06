@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
+
+const defaultUpstreamServers string = "https://cache.nixos.org" // idk, use a string since go doesn't have const lists, comma-separated
 
 func configInit(cacheName, kind, container string, fingerprints []string) error {
 	if cacheName == "" || kind == "" || container == "" || len(fingerprints) == 0 {
@@ -56,6 +59,7 @@ func configInit(cacheName, kind, container string, fingerprints []string) error 
 		StorageContainer: container,
 		StorageConfigMap: configMap,
 		KeyGroups:        []nicheKeyGroup{{"pgp": fingerprints}},
+		UpstreamServers:  strings.Split(defaultUpstreamServers, ","),
 	}
 
 	c, err := clientFromPrivateNicheConfig(newConfig, true)

@@ -52,6 +52,11 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 nix profile install 'github:colemickens/niche'
 ```
 
+You can also use this repo as a `nixpkgs` tarball, with `niche` on top. I personally use this so that I can have `niche` and `nixUnstable`
+available in a single `nixpkgs` that I can then use on arbitrary build machines with stable `nix-shell`.
+
+`nix-shell -I nixpkgs=https://github.com/colemickens/niche/archive/master.tar.gz -p niche -p nixUnstable`
+
 ## usage
 
 ### create new niche cache

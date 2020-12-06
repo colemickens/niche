@@ -122,6 +122,7 @@ func clientFromPrivateNicheConfig(cfg privateNicheConfig, create bool) (*nicheCl
 	return newClient, nil
 }
 
+// TODO: this needs to re-generate public config and push it...
 func (c *nicheClient) reuploadConfig() error {
 	privCfgBytesRaw, err := json.Marshal(c.config)
 	if err != nil {
@@ -209,23 +210,40 @@ func (c *nicheClient) sopsEncrypt(fileBytes []byte) ([]byte, error) {
 }
 
 func (c *nicheClient) ensurePath(storePath string) error {
-	log.Trace().Str("storePath", storePath).Msg("checking path")
-
 	niItemPath, err := narinfoItemPath(storePath)
 	if err != nil {
 		return err
 	}
 
-	// TODO: fetch "upstreams" from "public config"
-	// check for the narinfo on there, return if on one of their caches
-	_, errNarInfo := c.stowContainer.Item(niItemPath)
-	if errNarInfo != nil {
-		// there was an error retrieving the item
-		log.Trace().Str("storePath", storePath).Msg("narinfo missing")
-		return c.uploadPath(storePath)
+	// TODO: extract this to "checkPath" function
+	for _, server := range c.config.UpstreamServers {
+		log.Trace().Str("storePath", storePath).Str("server", server).Msg("checking for path in upstream")
+
+		serverNarInfoURL, err := preprocessHostArg(server)
+		if err != nil {
+			return err // what do we do here, just fall-through?
+		}
+
+		serverNarInfoURL.Path = path.Join(serverNarInfoURL.Path, niItemPath)
+		resp, err := http.Head(serverNarInfoURL.String())
+		if err != nil {
+			return err // what do we do here, just fall-through?
+		}
+		if resp.StatusCode == 200 {
+			log.Trace().Str("storePath", storePath).Str("server", server).Msg("path exists in upstream")
+			return nil
+		}
 	}
 
-	return nil
+	log.Trace().Str("storePath", storePath).Msg("checking for path in niche cache")
+	_, errNarInfo := c.stowContainer.Item(niItemPath)
+	if errNarInfo == nil {
+		log.Trace().Str("storePath", storePath).Msg("path exists in niche cache")
+		return nil
+	}
+
+	log.Trace().Str("storePath", storePath).Msg("narinfo missing")
+	return c.uploadPath(storePath)
 }
 
 func (c *nicheClient) uploadPath(storePath string) error {
@@ -236,28 +254,12 @@ func (c *nicheClient) uploadPath(storePath string) error {
 		return err
 	}
 
-	// we need the NAR hash if we don't have (it in) the narinfo
-	// compressedNarFilePath, err := c.nix.DumpPath(storePath)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer func() {
-	// 	log.Trace().Str("storePath", storePath).Msg("cleaning tmp compressed nar")
-	// 	os.Remove(compressedNarFilePath)
-	// }()
-
-	// narFile, err := os.Open(compressedNarFilePath)
-	// if err != nil {
-	// 	return err
-	// }
-
 	//compressedNarFilePath, err := c.nix.DumpPath(storePath)
 	compressedNarFilePath, err := narenc.DumpPathXz(storePath)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		log.Trace().Str("storePath", storePath).Msg("cleaning tmp compressed nar")
 		os.Remove(compressedNarFilePath)
 	}()
 
@@ -279,19 +281,17 @@ func (c *nicheClient) uploadPath(storePath string) error {
 	}
 
 	// Upload
-	narItem, err := c.stowContainer.Put(narInfo.URL, narFile, narInfo.NarSize, nil)
+	_, err = c.stowContainer.Put(narInfo.URL, narFile, narInfo.NarSize, nil)
 	if err != nil {
 		return err
 	}
-	log.Info().Str("path", narItem.Name()).Msg("uploaded path")
-
 	narInfoStr := narInfo.String()
 	narInfoRdr := bytes.NewBufferString(narInfoStr)
-	infoItem, err := c.stowContainer.Put(niItemPath, narInfoRdr, int64(len(narInfoStr)), nil)
+	_, err = c.stowContainer.Put(niItemPath, narInfoRdr, int64(len(narInfoStr)), nil)
 	if err != nil {
 		return err
 	}
-	log.Info().Str("path", infoItem.Name()).Msg("uploaded path")
+	log.Info().Str("storePath", storePath).Msg("upload complete")
 
 	return nil
 }

@@ -2,7 +2,7 @@
   description = "niche";
 
   inputs = {
-    nixpkgs = { url = "github:colemickens/nixpkgs/nixos-unstable"; };
+    nixpkgs = { url = "github:nixos/nixpkgs/nixos-unstable"; };
   };
 
   outputs = inputs:
@@ -18,16 +18,37 @@
       };
       pkgs_ = genAttrs (builtins.attrNames inputs) (inp: genAttrs supportedSystems (sys: pkgsFor inputs."${inp}" sys));
 
-      mkSystem = sys: pkgs_: hostname:
-        pkgs_.lib.nixosSystem {
-          system = sys;
-          modules = [(./. + "/hosts/${hostname}/configuration.nix")];
-          specialArgs = { inherit inputs; };
+      nichePkg = { stdenv, buildGoModule, fetchFromGitHub }:
+        let metadata = import ./metadata.nix; in
+        buildGoModule rec {
+          pname = "niche";
+          version = inputs.self.shortRev or "dirty";
+          src = ./.;
+          vendorSha256 = "sha256-OZ73SI+2Vqk+NLyhyQami88kiMhhwmTb9A8LArlBMJE=";
+          subPackages = [ "." ];
+          meta = with stdenv.lib; {
+            homepage = "https://github.com/colemickens/niche";
+            description = "a self-service nix binary cache tool that manages your signing key and wraps nix build to upload build products";
+            license = licenses.mit;
+            maintainers = with maintainers; [ colemickens ];
+            platforms = platforms.linux;
+          };
         };
     in rec {
-      defaultPackage = forAllSystems (sys: import inputs.nixpkgs {
-        # whatever to build the go app here
+      packages = forAllSystems (sys: {
+        niche = pkgs_.nixpkgs.${sys}.callPackage nichePkg {};
       });
+      overlay = final: prev: {
+        niche = prev.callPackage nichePkg {};
+      };
+      allPkgs = forAllSystems (sys: import inputs.nixpkgs {
+        system = sys;
+        config = { allowUnfree = true; };
+        overlays = [ inputs.self.overlay ];
+      });
+      defaultPackage = forAllSystems (sys:
+        inputs.self.packages.${sys}.niche
+      );
     };
 }
 

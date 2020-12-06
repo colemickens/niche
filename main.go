@@ -29,6 +29,9 @@ func init() {
 var nix nixclient.NixClient = nixclient.NixClientCli{}
 
 func preprocessHostArg(host string) (*url.URL, error) {
+	if host == "" {
+		return nil, fmt.Errorf("niche-url (-u) must be specified")
+	}
 	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
 		host = "https://" + host
 	}
