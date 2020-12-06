@@ -31,7 +31,7 @@ func build(cacheNameRaw string, extraArgs []string, alwaysOverwrite bool) error 
 	}
 	defer c.stowClient.Close()
 
-	queue := make(chan string, 1000)
+	queue := make(chan string, (1<<16)-1)
 
 	listener, err := newReceiver(c.nix, socketPath, queue)
 	if err != nil {
