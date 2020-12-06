@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,13 +44,6 @@ func (NixClientCli) PathInfo(storePath string) (pathInfo *NixPathInfo, err error
 	}, nil
 }
 
-func (NixClientCli) HashFile(storePath string) (hash string, err error) {
-	hashCmd := exec.Command("nix", "hash-file", storePath)
-	hashBytes, err := hashCmd.Output()
-	fileHash := strings.TrimSpace(string(hashBytes))
-	return fileHash, nil
-}
-
 /*
 func (NixClientCli) ToBase32(hash string) (string, error) {
 	cmd := exec.Command("nix", "to-base32", hash)
@@ -78,34 +70,27 @@ func (NixClientCli) QueryPaths(storePath string) ([]string, error) {
 	return outputStrings, nil
 }
 
-func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
+func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// DOESNT WORK ON AARCH64 COMMUNITY BOX:
-	// <option1>
+	// unset LD_PRELOAD to work around this:
 	postBuildBody := fmt.Sprintf("#!/bin/sh\n"+"unset LD_PRELOAD\n"+"%s queue -s %s", self, socketPath)
-	// </option1>
-	// <option2>
-	// TODO: this is also bad, relies on echo/nc being available...
-	_ = self
-	//postBuildBody := fmt.Sprintf("#!/bin/sh\n"+"/run/current-system/sw/bin/echo $OUT_PATHS | /run/current-system/sw/bin/nc -N -U %s", socketPath)
-	// </option2>
 
 	postBuildHookPath := fmt.Sprintf("/tmp/niche_%d_pbh", os.Getpid())
 	f, err := os.Create(postBuildHookPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	err = ioutil.WriteFile(postBuildHookPath, []byte(postBuildBody), 0777)
 	if err != nil {
-		return err
+		return "", err
 	}
 	f.Close()
 	if err := os.Chmod(postBuildHookPath, 0777); err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		//  os.Unlink(f) // TODO: unlink PBH to get rid of it
@@ -124,36 +109,8 @@ func (nixc NixClientCli) Build(socketPath string, buildArgs ...string) error {
 	_, err = cmd.Output()
 	if eerr, ok := err.(*exec.ExitError); ok {
 		log.Warn().Msg(string(eerr.Stderr))
-		return err
+		return "", err
 	}
 
-	finalBuiltPaths, err := nixc.QueryPaths(outLink)
-	if err != nil {
-		return err
-	}
-
-	c, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	for _, p := range finalBuiltPaths {
-		_, err = c.Write([]byte(p + "\n"))
-		if err != nil {
-			return err
-		}
-		log.Info().Str("path", p).Msg("sent final out link")
-	}
-
-	err = os.RemoveAll(outLink)
-	if err != nil {
-		return err
-	}
-	log.Info().Str("outLink", outLink).Msg("cleaned up outlink")
-	_, err = c.Write([]byte("QUIT\n"))
-	if err != nil {
-		return err
-	}
-	log.Info().Msg("sent QUIT")
-	return nil
+	return outLink, nil
 }

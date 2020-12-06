@@ -24,16 +24,13 @@ func processUploadQueue(c *nicheClient, queue chan string, wg *sync.WaitGroup, a
 		}
 		for _, seenPath := range seenPaths {
 			if strings.EqualFold(storePath, seenPath) {
-				log.Trace().Str("storePath", storePath).Msg("skipping already processed path")
 				continue
 			}
 		}
 		if alwaysOverwrite {
 			c.uploadPath(storePath)
-			log.Info().Str("storePath", storePath).Msg("uploaded storePath")
 		} else {
 			c.ensurePath(storePath)
-			log.Info().Str("storePath", storePath).Msg("ensured storePath")
 		}
 		seenPaths = append(seenPaths, storePath)
 	}

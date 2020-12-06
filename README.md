@@ -7,6 +7,8 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
 **Tested with**: Azure, B2, S3, Wasabi, ~~Google Storage~~ ([see here]([issue-link](https://github.com/colemickens/niche/issues/4#issuecomment-738495142)))
 
+# Please don't share this, it's got a bug in it still
+
 - [features](#features)
 - [install](#install)
 - [usage](#usage)
@@ -43,6 +45,7 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
   `niche` can manage Nix mirrors **behind firewalls**, in **Internet-less** virtual networks, leverage **free internal bandwidth** in cloud provider networks, etc.
 
+
 ## install
 
 1. Install `nix`.
@@ -56,6 +59,8 @@ You can also use this repo as a `nixpkgs` tarball, with `niche` on top. I person
 available in a single `nixpkgs` that I can then use on arbitrary build machines with stable `nix-shell`.
 
 `nix-shell -I nixpkgs=https://github.com/colemickens/niche/archive/master.tar.gz -p niche -p nixUnstable`
+
+**I would prefer this not be submitted to nixpkgs until the CLI is considered stable.**
 
 ## usage
 

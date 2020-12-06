@@ -129,10 +129,16 @@ func mainCli() error {
 						Value:   "",
 						Usage:   "the url to the cache",
 					},
+					&cli.BoolFlag{
+						Name:    "always-upload",
+						Aliases: []string{"a"},
+						Value:   false,
+						Usage:   "always/force upload, regardless of upstream cache or previous existence",
+					},
 				},
 				Action: func(c *cli.Context) error {
 					cacheURLRaw := c.String("cache-url")
-					return build(cacheURLRaw, c.Args().Slice()[0:])
+					return build(cacheURLRaw, c.Args().Slice()[0:], c.Bool("always-upload"))
 				},
 			},
 

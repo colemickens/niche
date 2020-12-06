@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,7 +10,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func build(cacheNameRaw string, extraArgs []string) error {
+const numUploaders int = 1
+
+func build(cacheNameRaw string, extraArgs []string, alwaysOverwrite bool) error {
 	cacheURL, err := preprocessHostArg(cacheNameRaw)
 	if err != nil {
 		return err
@@ -28,9 +31,6 @@ func build(cacheNameRaw string, extraArgs []string) error {
 	}
 	defer c.stowClient.Close()
 
-	_, alwaysOverwrite := os.LookupEnv("NICHE_OVERWRITE")
-
-	wg := sync.WaitGroup{}
 	queue := make(chan string, 1000)
 
 	listener, err := newReceiver(c.nix, socketPath, queue)
@@ -41,14 +41,44 @@ func build(cacheNameRaw string, extraArgs []string) error {
 	defer listener.close()
 
 	// process the build queue
-	go processUploadQueue(c, queue, &wg, alwaysOverwrite)
+	wg := sync.WaitGroup{}
+	for i := 0; i < numUploaders; i++ {
+		go processUploadQueue(c, queue, &wg, alwaysOverwrite)
+	}
+	defer wg.Wait()
 
-	err = nix.Build(socketPath, extraArgs...)
+	outLink, err := nix.Build(socketPath, extraArgs...)
 	if err != nil {
 		return err
 	}
 
-	wg.Wait()
-	log.Info().Msg("all done.")
+	finalBuiltPaths, err := nix.QueryPaths(outLink)
+	if err != nil {
+		return err
+	}
+
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	for _, p := range finalBuiltPaths {
+		_, err = conn.Write([]byte(p + "\n"))
+		if err != nil {
+			return err
+		}
+		log.Info().Str("path", p).Msg("sent final out link")
+	}
+
+	err = os.RemoveAll(outLink)
+	if err != nil {
+		return err
+	}
+	log.Info().Str("outLink", outLink).Msg("cleaned up outlink")
+	_, err = conn.Write([]byte("QUIT\n"))
+	if err != nil {
+		return err
+	}
+	log.Info().Msg("sent QUIT")
 	return nil
 }

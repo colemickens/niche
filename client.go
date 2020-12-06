@@ -217,12 +217,11 @@ func (c *nicheClient) ensurePath(storePath string) error {
 
 	// TODO: extract this to "checkPath" function
 	for _, server := range c.config.UpstreamServers {
-		log.Trace().Str("storePath", storePath).Str("server", server).Msg("checking for path in upstream")
-
 		serverNarInfoURL, err := preprocessHostArg(server)
 		if err != nil {
 			return err // what do we do here, just fall-through?
 		}
+		s := serverNarInfoURL.String()
 
 		serverNarInfoURL.Path = path.Join(serverNarInfoURL.Path, niItemPath)
 		resp, err := http.Head(serverNarInfoURL.String())
@@ -230,15 +229,19 @@ func (c *nicheClient) ensurePath(storePath string) error {
 			return err // what do we do here, just fall-through?
 		}
 		if resp.StatusCode == 200 {
-			log.Trace().Str("storePath", storePath).Str("server", server).Msg("path exists in upstream")
+			log.Info().Str("storePath", storePath).Str("server", s).Msg("path skipped")
 			return nil
 		}
 	}
 
-	log.Trace().Str("storePath", storePath).Msg("checking for path in niche cache")
+	// we don't have the user-specified end-url, and don't really care to here
+	// so form a nice string to indicate we're checking the actual niche cache now
+	nicheServer := c.config.StorageKind + "/" + c.config.StorageContainer
+
+	log.Trace().Str("storePath", storePath).Str("server", nicheServer).Msg("checking for path")
 	_, errNarInfo := c.stowContainer.Item(niItemPath)
 	if errNarInfo == nil {
-		log.Trace().Str("storePath", storePath).Msg("path exists in niche cache")
+		log.Info().Str("storePath", storePath).Str("server", nicheServer).Msg("path skipped")
 		return nil
 	}
 
@@ -291,7 +294,7 @@ func (c *nicheClient) uploadPath(storePath string) error {
 	if err != nil {
 		return err
 	}
-	log.Info().Str("storePath", storePath).Msg("upload complete")
+	log.Info().Str("storePath", storePath).Msg("uploaded path")
 
 	return nil
 }

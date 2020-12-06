@@ -13,5 +13,5 @@ type NixPathInfo struct {
 type NixClient interface {
 	PathInfo(storePath string) (pathInfo *NixPathInfo, err error)
 	QueryPaths(storePath string) (dependencies []string, err error)
-	Build(thing string, extraArgs ...string) error
+	Build(thing string, extraArgs ...string) (string, error)
 }
