@@ -84,7 +84,7 @@ func mainCobra() error {
 		Short: "builds an INSTALLABLE and uploads each output as they're built",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
-			return build(args[0], args[1:])
+			return build(args[0], args[1:], false)
 		},
 	}
 
