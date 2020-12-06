@@ -6,4 +6,4 @@ let
     src = ./.;
   });
 in
-  flake.defaultNix.allPkgs."${builtins.currentSystem}"
+  { system, ...}: flake.defaultNix.allPkgs."${system}"
