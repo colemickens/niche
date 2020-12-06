@@ -81,15 +81,17 @@ func handle(nix nixclient.NixClient, conn net.Conn, queue chan<- string) {
 		// our "socket" accepts all sorts of paths
 		// we throw them at nix-store and try to get back a list of paths
 		// that's what we actually queue for handling as individal good store paths
-		allStorePaths, err := nix.QueryPaths(storePath)
-		if err != nil {
-			log.Warn().Err(err).Msg("unexpected error querying all store paths")
-			break
-		}
+		// allStorePaths, err := nix.QueryPaths(storePath)
+		// if err != nil {
+		// 	log.Warn().Err(err).Msg("unexpected error querying all store paths")
+		// 	break
+		// }
 
-		for _, storePath := range allStorePaths {
-			log.Info().Str("storePath", storePath).Msg("sending storePath to the queue")
-			queue <- storePath
-		}
+		// for _, storePath := range allStorePaths {
+		// 	log.Info().Str("storePath", storePath).Msg("sending storePath to the queue")
+		// 	queue <- storePath
+		// }
+		log.Info().Str("storePath", storePath).Msg("sending storePath to the queue")
+		queue <- storePath
 	}
 }
