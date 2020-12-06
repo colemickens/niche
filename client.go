@@ -229,7 +229,7 @@ func (c *nicheClient) ensurePath(storePath string) error {
 			return err // what do we do here, just fall-through?
 		}
 		if resp.StatusCode == 200 {
-			log.Info().Str("storePath", storePath).Str("server", s).Msg("path skipped")
+			log.Trace().Str("storePath", storePath).Str("server", s).Msg("path skipped")
 			return nil
 		}
 	}
@@ -241,7 +241,7 @@ func (c *nicheClient) ensurePath(storePath string) error {
 	log.Trace().Str("storePath", storePath).Str("server", nicheServer).Msg("checking for path")
 	_, errNarInfo := c.stowContainer.Item(niItemPath)
 	if errNarInfo == nil {
-		log.Info().Str("storePath", storePath).Str("server", nicheServer).Msg("path skipped")
+		log.Trace().Str("storePath", storePath).Str("server", nicheServer).Msg("path skipped")
 		return nil
 	}
 

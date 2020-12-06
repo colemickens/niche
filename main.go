@@ -21,9 +21,16 @@ import (
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if os.Getenv("NICHE_DEBUG") != "" {
+        nicheDebugEnv := os.Getenv("NICHE_DEBUG")
+        level := "unset"
+	if nicheDebugEnv != "" {
+                level = "trace"
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	}
+	} else {
+                level = "info"
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+        }
+        log.Info().Str("logLevel", level).Msg("logging configured")
 }
 
 var nix nixclient.NixClient = nixclient.NixClientCli{}
