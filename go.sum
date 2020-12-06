@@ -107,8 +107,6 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
-github.com/colemickens/stow v0.2.7-0.20201203230932-fb82c90f971f h1:bnTvbYj8acxAy7n0q7e1xn/YpVmXTAun22WNhh1UKeA=
-github.com/colemickens/stow v0.2.7-0.20201203230932-fb82c90f971f/go.mod h1:U4tYq0ZBcLbJWnY3zoKJZ0brOUZFt6Po9iwzTurxtWY=
 github.com/colemickens/stow v0.2.7-0.20201203234909-b530d1a48a82 h1:GnsOzD3b8JUlzny+WijclfGWevv3FUuzNO9pxu3gG/o=
 github.com/colemickens/stow v0.2.7-0.20201203234909-b530d1a48a82/go.mod h1:U4tYq0ZBcLbJWnY3zoKJZ0brOUZFt6Po9iwzTurxtWY=
 github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc h1:TP+534wVlf61smEIq1nwLLAjQVEK2EADoW3CX9AuT+8=
