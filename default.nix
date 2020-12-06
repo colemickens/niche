@@ -6,4 +6,4 @@ let
     src = ./.;
   });
 in
-  { system, ...}: flake.defaultNix.allPkgs."${system}"
+  flake.defaultNix.allPkgs
