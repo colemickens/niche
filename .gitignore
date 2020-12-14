@@ -1,5 +1,5 @@
 .vscode/
-./niche
+/niche
 *.secret.json
-result*
-result/*
+/result*
+/result/*
