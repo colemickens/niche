@@ -1,0 +1,45 @@
+image: nixos/unstable
+sources:
+  - git@github.com:colemickens/niche
+secrets:
+  - bd070f2a-01d1-4b7b-9795-036deb06912c # id_ed25519
+environment:
+  CI_BUILD: "sr.ht"
+tasks:
+  - prep: |
+      cd nixpkgs-wayland
+      nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable --command "./.ci/step-prep.sh"
+  - flake-update: |
+      cd nixpkgs-wayland
+      nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable --command "nix --experimental-features 'nix-command flakes' flake update --recreate-lock-file --no-registries"
+  - unlock: |
+      cd niche/.ci
+      nix-shell --pure --command "./.ci/step-unlock.sh"
+  - try-update: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-try-update.sh"
+  - cache: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-cache.sh"
+  - test-azure: |
+      cd niche/tests
+      nix-shell --pure --command "./tests/test-azure.sh"
+  - test-b2: |
+      cd niche/tests
+      nix-shell --pure --command "./test-b2.sh"
+  - test-google: |
+      cd niche/tests
+      nix-shell --pure --command "./test-google.sh"
+  - test-s3: |
+      cd niche/tests
+      nix-shell --pure --command "./test-s3.sh"
+  - test-wasabi: |
+      cd niche/tests
+      nix-shell --pure --command "./test-wasabi.sh"
+  - push: |
+      cd niche
+      nix-shell --pure --command "./.ci/step-push.sh"
+
+# TODO: there's lots to improve here
+# - extract this out into a bespoke Nix CI system that supports multi-arch jobs
+# - split into separate jobs?

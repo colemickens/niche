@@ -13,5 +13,5 @@ require (
 	github.com/ulikunitz/xz v0.5.8
 	github.com/urfave/cli/v2 v2.3.0
 	go.mozilla.org/sops/v3 v3.6.1
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 )

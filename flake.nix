@@ -24,7 +24,8 @@
           pname = "niche";
           version = inputs.self.shortRev or "dirty";
           src = ./.;
-          vendorSha256 = "sha256-OZ73SI+2Vqk+NLyhyQami88kiMhhwmTb9A8LArlBMJE=";
+          #vendorSha256 = "sha256-OZ73SI+2Vqk+NLyhyQami88kiMhhwmTb9A8LArlBMJE=";
+          vendorSha256 = stdenv.lib.fakeSha256;
           subPackages = [ "." ];
           meta = with stdenv.lib; {
             homepage = "https://github.com/colemickens/niche";
@@ -35,6 +36,16 @@
           };
         };
     in rec {
+      devShell = forAllSystems (system:
+        pkgs_.nixpkgs.${system}.mkShell {
+          name = "niche-devshell";
+          nativeBuildInputs = (with pkgs_.nixpkgs.${system}; [
+            cachix sops go gotools gopls pkgconfig
+            bash cacert curl git jq
+            nettools openssh ripgrep
+          ]);
+        }
+      );
       packages = forAllSystems (sys: {
         niche = pkgs_.nixpkgs.${sys}.callPackage nichePkg {};
       });

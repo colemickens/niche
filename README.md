@@ -11,12 +11,15 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
 - [features](#features)
 - [install](#install)
+    - [~~from nixpkgs~~](#sfrom-nixpkgss)
+    - [from source, via flake](#from-source-via-flake)
 - [usage](#usage)
   - [create new niche cache](#create-new-niche-cache)
   - [reconfigure niche cache](#reconfigure-niche-cache)
   - [view public key](#view-public-key)
   - [build and upload](#build-and-upload)
 - [accessing your cache](#accessing-your-cache)
+- [development](#development)
 - [thanks](#thanks)
 
 ## features
@@ -48,6 +51,12 @@ to upload build artifacts *as they're produced* rather than waiting for a succes
 
 ## install
 
+#### ~~from nixpkgs~~
+~~It's available from `nixpkgs` as `niche`.~~
+
+**I would prefer this not be submitted to nixpkgs until the CLI is considered stable.**
+
+#### from source, via flake
 1. Install `nix`.
 2. Activate [`flakes`]().
 3. Add it to your `devenv.nix`, your CI's `shell.nix`, or install it in your profile:
@@ -56,11 +65,10 @@ nix profile install 'github:colemickens/niche'
 ```
 
 You can also use this repo as a `nixpkgs` tarball, with `niche` on top. I personally use this so that I can have `niche` and `nixUnstable`
-available in a single `nixpkgs` that I can then use on arbitrary build machines with stable `nix-shell`.
-
-`nix-shell -I nixpkgs=https://github.com/colemickens/niche/archive/master.tar.gz -p niche -p nixUnstable`
-
-**I would prefer this not be submitted to nixpkgs until the CLI is considered stable.**
+available in a single `nixpkgs` that I can then use on arbitrary build machines with stable `nix-shell`:
+```
+nix-shell -I nixpkgs=https://github.com/colemickens/niche/archive/master.tar.gz -p niche -p nixUnstable
+```
 
 ## usage
 
@@ -134,6 +142,18 @@ The following are examples of value would be used as `<niche_url>` in the usage:
   * `s3cache.r10e.dev` (using CloudFront)
 * wasabi:
   * `s3.wasabisys.com/${CACHE_NAME}`
+
+## development
+
+Development of `niche` is done with `nix`:
+
+```shell
+❯ git clone https://github.com/colemickens/niche
+❯ nix build '.#'
+❯ ./result/bin/niche --version # TODO: add a version command and log it during startups for bug report purposes
+dirty
+# TODO fix this up
+```
 
 ## thanks
 

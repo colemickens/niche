@@ -9,11 +9,12 @@ SECRET_ATTR="pat"
 
 # less user-specific
 BUILD_HOST="https://builds.sr.ht"
-TOKEN="$(gopass show "${SECRET_NAME}" | grep "${SECRET_ATTR}" | cut -d' ' -f2)"
+TOKEN="$(cat "/run/secrets/srht-pat")" # this assumes we're submitting from a colemickens/nixcfg machine
 
 DATA="$(mktemp)"
 MANIFEST="$(jq -aRs . <"${DIR}/srht-job.yaml")"
 echo "{ \"manifest\": ${MANIFEST} }" > "${DATA}"
+trap "rm $DATA" EXIT
 
 curl \
   -H "Authorization:token ${TOKEN}" \

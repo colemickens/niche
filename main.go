@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
-	"net/url"
 	"os"
-	"strings"
 
-	"github.com/colemickens/niche/pkg/nixclient"
+	"github.com/colemickens/niche/pkg/niche"
+
 	_ "github.com/graymeta/stow/azure"
 	_ "github.com/graymeta/stow/b2"
 	_ "github.com/graymeta/stow/google"
@@ -21,34 +20,22 @@ import (
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-        nicheDebugEnv := os.Getenv("NICHE_DEBUG")
-        level := "unset"
+	nicheDebugEnv := os.Getenv("NICHE_DEBUG")
+	level := "unset"
 	if nicheDebugEnv != "" {
-                level = "trace"
+		level = "trace"
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	} else {
-                level = "info"
+		level = "info"
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-        }
-        log.Info().Str("logLevel", level).Msg("logging configured")
-}
-
-var nix nixclient.NixClient = nixclient.NixClientCli{}
-
-func preprocessHostArg(host string) (*url.URL, error) {
-	if host == "" {
-		return nil, fmt.Errorf("niche-url (-u) must be specified")
 	}
-	if !strings.HasPrefix(host, "https://") && !strings.HasPrefix(host, "http://") {
-		host = "https://" + host
-	}
-	return url.Parse(host)
+	log.Info().Str("logLevel", level).Msg("zerolog configured")
 }
 
 func main() {
-	err := mainCli()
+	err := niche.MainCli()
 	if err != nil {
-		fmt.Println("niche handling this one", err)
+		fmt.Printf("mainCli returned error, exit 1 (err=%s)\n", err)
 		os.Exit(1)
 	}
 }
