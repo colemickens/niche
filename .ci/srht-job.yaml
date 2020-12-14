@@ -9,9 +9,7 @@ tasks:
   - prep: |
       cd niche
       nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable -p git -p cachix --command "./.ci/step-prep.sh"
-  - flake-update: |
-      cd niche
-      nix-shell -I 'https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz' -p nixUnstable --command "nix --experimental-features 'nix-command flakes' flake update --recreate-lock-file --no-registries"
+      nix-shell --pure --command "true"
   - unlock: |
       cd niche
       nix-shell --pure --command "./.ci/step-unlock.sh"
