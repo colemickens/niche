@@ -24,7 +24,7 @@
           pname = "niche";
           version = inputs.self.shortRev or "dirty";
           src = ./.;
-          vendorSha256 = "sha256-9IH0RXLLU67yhTg9qtUWlMUn/nX7dpqweY5SwRz5Z+A=";
+          vendorSha256 = "sha256-g5VBgyD3UftbtAlotdnRn0QU6IUTeDGXOaP3lIUS46o=";
           subPackages = [ "." ];
           meta = with stdenv.lib; {
             homepage = "https://github.com/colemickens/niche";

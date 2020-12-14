@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go v1.36.7 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/fatih/color v1.10.0 // indirect
+	github.com/frankban/quicktest v1.11.2 // indirect
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/graymeta/stow v0.2.6
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -21,7 +22,6 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.6.8 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.0 // indirect
@@ -47,5 +47,4 @@ require (
 	gopkg.in/kothar/go-backblaze.v0 v0.0.0-20191215213626-7594ed38700f // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
-	honnef.co/go/tools v0.0.1-2020.1.6 // indirect
 )

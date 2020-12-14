@@ -5,6 +5,13 @@ set -x
 # update all deps
 go get -u ./...
 
+# ensure our stow fork is up-to-date
+stowrev="$(git ls-remote https://github.com/colemickens/stow --rev HEAD | cut -d"$(echo -e \\t)" -f1)"
+go mod edit -replace "github.com/graymeta/stow=github.com/colemickens/stow@${stowrev}"
+
+# tidy (this also resolves the above to a rev, though that might be cached??)
+go mod tidy
+
 # see if we still build
 go build ./...
 
