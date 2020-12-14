@@ -24,8 +24,7 @@
           pname = "niche";
           version = inputs.self.shortRev or "dirty";
           src = ./.;
-          #vendorSha256 = "sha256-OZ73SI+2Vqk+NLyhyQami88kiMhhwmTb9A8LArlBMJE=";
-          vendorSha256 = stdenv.lib.fakeSha256;
+          vendorSha256 = "sha256-9IH0RXLLU67yhTg9qtUWlMUn/nX7dpqweY5SwRz5Z+A=";
           subPackages = [ "." ];
           meta = with stdenv.lib; {
             homepage = "https://github.com/colemickens/niche";
@@ -40,7 +39,8 @@
         pkgs_.nixpkgs.${system}.mkShell {
           name = "niche-devshell";
           nativeBuildInputs = (with pkgs_.nixpkgs.${system}; [
-            cachix sops go gotools gopls pkgconfig
+            cachix sops pkgconfig nix-prefetch
+            go gotools gopls gocode gopkgs go-outline godef golint gocode-gomod
             bash cacert curl git jq
             nettools openssh ripgrep
           ]);
