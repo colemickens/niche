@@ -20,19 +20,19 @@ tasks:
       cd niche
       nix-shell --pure --command "./.ci/step-cache.sh"
   - test-azure: |
-      cd niche/tests
+      cd niche
       nix-shell --pure --command "./tests/test-azure.sh"
   - test-b2: |
-      cd niche/tests
+      cd niche
       nix-shell --pure --command "./test-b2.sh"
   - test-google: |
-      cd niche/tests
+      cd niche
       nix-shell --pure --command "./test-google.sh"
   - test-s3: |
-      cd niche/tests
+      cd niche
       nix-shell --pure --command "./test-s3.sh"
   - test-wasabi: |
-      cd niche/tests
+      cd niche
       nix-shell --pure --command "./test-wasabi.sh"
   - push: |
       cd niche
