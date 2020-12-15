@@ -67,10 +67,9 @@ publickey="$(niche show ${cache})"
 
 # now re-acquire the store path by checking our specific cache
 outlink="$(mktemp -d)"; rm -rf "${outlink}"; trap "rm -rf $outlink" EXIT
-nix-build "$(cat $ttt)" -j0 \
+nix-store -r "$(cat $ttt)" -j0 \
   --option 'extra-binary-caches' "https://${cache}" \
-  --option 'trusted-public-keys' "${publickey}" \
-  --out-link "${outlink}"
+  --option 'trusted-public-keys' "${publickey}"
 
 # prove it's really back (aka, was cached and had a good signature)
 ls -al $(readlink "${outlink}")
