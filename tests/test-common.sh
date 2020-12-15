@@ -39,7 +39,8 @@ niche config init -n "${cachename}" -k "${kind}" -b "${cachename}" -p "$fp"
 
 # build it so we can grab the outlink (so we can test realization later)
 outlink="$(mktemp -d)"; rm -rf "${outlink}"; trap "rm -rf $outlink" EXIT
-nix build --impure --out-link "${outlink}" "${thing}"
+nix --experimental-features 'nix-command flakes' \
+  build --impure --out-link "${outlink}" "${thing}"
 
 # we can't read it to a variable, so stash the out path in a file
 # -> if we do, it is the environ for the `niche` process and it seems like somehow
@@ -50,7 +51,7 @@ readlink -f "${outlink}" > $ttt
 rm -rf "${outlink}"
 
 # now build with `niche` so it gets signed+uploaded to our cache
-niche build -u "$cache" -- "$(cat $ttt)"
+niche build -u "$cache" -- --experimental-features 'nix-command flakes' "$(cat $ttt)"
 
 #TODO: alternatively test `niche upload`
 
@@ -66,7 +67,7 @@ publickey="$(niche show ${cache})"
 
 # now re-acquire the store path by checking our specific cache
 outlink="$(mktemp -d)"; rm -rf "${outlink}"; trap "rm -rf $outlink" EXIT
-nix build "$(cat $ttt)" -j0 \
+nix-build "$(cat $ttt)" -j0 \
   --option 'extra-binary-caches' "https://${cache}" \
   --option 'trusted-public-keys' "${publickey}" \
   --out-link "${outlink}"
