@@ -1,8 +1,8 @@
 image: nixos/unstable
 sources:
-  - git@github.com:colemickens/niche#master
+  - https://github.com/colemickens/niche#master # use a PAT to push back
 secrets:
-  - bd070f2a-01d1-4b7b-9795-036deb06912c # id_ed25519
+  - 3396ef98-8bbc-4602-8b6e-2a6c2fcf4d01 # srht gpg key for sops
 environment:
   CI_BUILD: "sr.ht"
 tasks:
