@@ -43,6 +43,7 @@
             go gotools gopls gocode gopkgs go-outline godef golint gocode-gomod
             bash cacert curl git jq
             nettools openssh ripgrep
+            gpg # mozilla/sops bug
           ]);
         }
       );
