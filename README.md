@@ -1,6 +1,6 @@
 # niche
 
-[![builds.sr.ht status](https://builds.sr.ht/~colemickens/niche-azure.svg)](https://builds.sr.ht/~colemickens/niche-azure?)
+[![builds.sr.ht status](https://builds.sr.ht/~colemickens/niche.svg)](https://builds.sr.ht/~colemickens/niche?)
 
 `niche` creates and manages Nix caches backed by cloud blob storage. `niche` wraps `nix build`
 to upload build artifacts *as they're produced* rather than waiting for a successful build.
