@@ -39,11 +39,11 @@
         pkgs_.nixpkgs.${system}.mkShell {
           name = "niche-devshell";
           nativeBuildInputs = (with pkgs_.nixpkgs.${system}; [
-            cachix sops pkgconfig nix-prefetch
             go gotools gopls gocode gopkgs go-outline godef golint gocode-gomod
-            bash cacert curl git jq
+            bash cacert curl git jq pkgconfig
             nettools openssh ripgrep
-            gnupg # mozilla/sops bug
+            nix-prefetch nixUnstable  # ci
+            gnupg cachix sops         # ci
           ]);
         }
       );
