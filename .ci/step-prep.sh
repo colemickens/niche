@@ -10,7 +10,7 @@ git config --global user.name \
 git config --global user.email \
  "cole.mickens+colebot@gmail.com"
 
-echo "https://colemickens:$(cat .ci/unencrypted/github_niche_ci_pat | head -1)@github.com" \
+echo "https://colebot:$(cat .ci/unencrypted/github_niche_ci_pat | head -1)@github.com" \
   > "${HOME}/.git-credentials"
 
 git config credential.helper 'store'
