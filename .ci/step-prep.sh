@@ -4,16 +4,16 @@ set -x
 
 cachix use colemickens
 
-# not sure this is needed with https git remote
-mkdir -p "${HOME}/.ssh"
-ssh-keyscan github.com >> ${HOME}/.ssh/known_hosts
-# would be nice to have this the same across srht jobs
-
 git config --global user.name \
  "Cole Botkens"
 
 git config --global user.email \
  "cole.mickens+colebot@gmail.com"
+
+echo "https://colemickens:$(cat .ci/unencrypted/github_niche_ci_pat | head -1)@github.com" \
+  > "${HOME}/.git-credentials"
+
+git config credential.helper 'store'
 
 # first things first, let's update our flake
 nix --experimental-features 'nix-command flakes' flake update --recreate-lock-file --no-registries
